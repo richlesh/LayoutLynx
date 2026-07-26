@@ -1,0 +1,44 @@
+/* styles1-1.css - Typography details (imported by styles1.css) */
+
+h1 {
+    font-size: 2.5rem;
+    color: #9999ff;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+h2 {
+    font-size: 1.75rem;
+    color: #283593;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e8eaf6;
+}
+
+h3 {
+    font-size: 1.35rem;
+    color: #3949ab;
+    margin-bottom: 0.75rem;
+    margin-top: 1.25rem;
+}
+
+h4 {
+    font-size: 1.1rem;
+    color: #5c6bc0;
+    margin-bottom: 0.5rem;
+    margin-top: 1rem;
+    font-style: italic;
+}
+
+p {
+    margin-bottom: 1rem;
+    color: #424242;
+    text-align: justify;
+}
+
+header p {
+    font-size: 1.125rem;
+    color: #5c6bc0;
+    font-style: italic;
+    text-align: center;
+}

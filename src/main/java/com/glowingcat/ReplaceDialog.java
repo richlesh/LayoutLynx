@@ -1,132 +1,291 @@
 /*
  * (c) 2026 Glowing Cat Software
  */
-package com.glowingcat;
 
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+/**
+ * ReplaceDialog.java
+ *
+ * Provides a Find and Replace dialog for the LayoutLynx editor.
+ * Extends {@link FindDialog} to add a replacement text field and replace
+ * operations (Replace, Replace and Find, Replace All) while reusing the
+ * search logic and option checkboxes from the parent class.
+ */
+package com.glowingcat;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 /**
- * Find and Replace dialog for the editor.
+ * A Replace dialog that extends {@link FindDialog}, adding a replacement text field
+ * and buttons for Replace, Replace and Find, and Replace All operations.
+ * <p>
+ * Inherits all search options (Match Case, Wrap Around, Search Backwards,
+ * Find in Selection) from FindDialog.
  */
-public class ReplaceDialog extends JDialog {
+public class ReplaceDialog extends FindDialog {
 
-    private final JTextField searchField;
-    private final JTextField replaceField;
-    private final JCheckBox caseSensitiveBox;
-    private final JCheckBox wrapAroundBox;
-    private RSyntaxTextArea textArea;
+    /** Text field where the user enters the replacement text. */
+    private JTextField replaceField;
 
-    public ReplaceDialog(JFrame parent, RSyntaxTextArea textArea) {
-        super(parent, "Replace", false);
-        this.textArea = textArea;
+    /**
+     * Creates a Replace dialog attached to the given owner frame and text area.
+     *
+     * @param owner    the parent frame
+     * @param textArea the text area to perform replacements on
+     */
+    public ReplaceDialog(JFrame owner, JTextArea textArea) {
+        super(owner, textArea, "Replace");
+    }
 
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+    /**
+     * Creates the top panel with both a "Find:" and a "Replace:" text field,
+     * arranged in a two-row grid layout.
+     *
+     * @return the configured top panel with find and replace fields
+     */
+    @Override
+    protected JPanel createTopPanel() {
+        JPanel topPanel = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.insets = new Insets(2, 4, 2, 4);
+        gbc.anchor = GridBagConstraints.WEST;
 
-        gbc.gridx = 0; gbc.gridy = 0;
-        panel.add(new JLabel("Find:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        searchField = new JTextField(20);
-        panel.add(searchField, gbc);
+        // Find label and field
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        topPanel.add(new JLabel("Find:"), gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        panel.add(new JLabel("Replace:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1.0;
-        replaceField = new JTextField(20);
-        panel.add(replaceField, gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        topPanel.add(searchField = new JTextField(24), gbc);
 
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.NONE; gbc.weightx = 0;
-        caseSensitiveBox = new JCheckBox("Case Sensitive");
-        panel.add(caseSensitiveBox, gbc);
+        // Replace label and field
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.fill = GridBagConstraints.NONE;
+        gbc.weightx = 0;
+        topPanel.add(new JLabel("Replace:"), gbc);
 
-        gbc.gridy = 3;
-        wrapAroundBox = new JCheckBox("Wrap Around", true);
-        panel.add(wrapAroundBox, gbc);
+        gbc.gridx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 1.0;
+        replaceField = new JTextField(24);
+        topPanel.add(replaceField, gbc);
 
-        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        JButton findNextBtn = new JButton("Find Next");
-        findNextBtn.addActionListener(e -> findNext());
-        JButton replaceBtn = new JButton("Replace");
-        replaceBtn.addActionListener(e -> replaceNext());
-        JButton replaceAllBtn = new JButton("Replace All");
+        return topPanel;
+    }
+
+    /**
+     * Creates the button panel with Find, Replace, Replace and Find, and Replace All buttons.
+     *
+     * @return the configured button panel
+     */
+    @Override
+    protected JPanel createButtonPanel() {
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.Y_AXIS));
+        buttonPanel.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 0));
+
+        JButton findBtn = createButton("Find");
+        JButton replaceBtn = createButton("Replace");
+        JButton replaceAndFindBtn = createButton("Replace and Find");
+        JButton replaceAllBtn = createButton("Replace All");
+
+        findBtn.addActionListener(e -> findNext());
+        replaceBtn.addActionListener(e -> replace());
+        replaceAndFindBtn.addActionListener(e -> replaceAndFind());
         replaceAllBtn.addActionListener(e -> replaceAll());
-        JButton closeBtn = new JButton("Close");
-        closeBtn.addActionListener(e -> setVisible(false));
-        buttonPanel.add(findNextBtn);
+
+        buttonPanel.add(findBtn);
+        buttonPanel.add(Box.createVerticalStrut(6));
         buttonPanel.add(replaceBtn);
+        buttonPanel.add(Box.createVerticalStrut(6));
+        buttonPanel.add(replaceAndFindBtn);
+        buttonPanel.add(Box.createVerticalStrut(6));
         buttonPanel.add(replaceAllBtn);
-        buttonPanel.add(closeBtn);
 
-        gbc.gridy = 4; gbc.gridwidth = 2;
-        panel.add(buttonPanel, gbc);
-
-        setContentPane(panel);
-        pack();
-        setLocationRelativeTo(parent);
+        return buttonPanel;
     }
 
-    public void setTextArea(RSyntaxTextArea textArea) {
-        this.textArea = textArea;
-    }
+    /**
+     * Replaces the currently selected text if it matches the search text.
+     * Respects the Match Case option. If "Find in selection" is active,
+     * adjusts the remembered selection end boundary to account for the
+     * length difference between the search and replacement text.
+     *
+     * @return {@code true} if a replacement was made, {@code false} otherwise
+     */
+    private boolean replace() {
+        String searchText = searchField.getText();
+        if (searchText.isEmpty()) return false;
 
-    private void findNext() {
-        String search = searchField.getText();
-        if (search.isEmpty()) return;
+        String selectedText = textArea.getSelectedText();
+        if (selectedText == null) return false;
 
-        String text = textArea.getText();
-        boolean caseSensitive = caseSensitiveBox.isSelected();
-        int startPos = textArea.getCaretPosition();
+        boolean matchCase = matchCaseBox.isSelected();
+        boolean useRegex = regexBox.isSelected();
+        String replaceText = replaceField.getText();
 
-        if (!caseSensitive) {
-            text = text.toLowerCase();
-            search = search.toLowerCase();
+        // Process escape sequences if enabled (not applicable in regex mode)
+        if (!useRegex && escapesBox.isSelected()) {
+            searchText = processEscapes(searchText);
+            replaceText = processEscapes(replaceText);
         }
 
-        int idx = text.indexOf(search, startPos);
-        if (idx < 0 && wrapAroundBox.isSelected()) {
-            idx = text.indexOf(search, 0);
-        }
-
-        if (idx >= 0) {
-            textArea.setCaretPosition(idx);
-            textArea.setSelectionStart(idx);
-            textArea.setSelectionEnd(idx + searchField.getText().length());
-            textArea.requestFocusInWindow();
+        if (useRegex) {
+            try {
+                int flags = Pattern.MULTILINE | (matchCase ? 0 : Pattern.CASE_INSENSITIVE);
+                Pattern pattern = Pattern.compile(searchText, flags);
+                Matcher matcher = pattern.matcher(selectedText);
+                if (matcher.matches()) {
+                    // Use replaceFirst to support capture group references ($1, $2, etc.)
+                    String replacement = matcher.replaceFirst(replaceText);
+                    textArea.replaceSelection(replacement);
+                    if (findInSelectionBox.isSelected() && selectionStart >= 0) {
+                        int lengthDiff = replacement.length() - selectedText.length();
+                        selectionEnd += lengthDiff;
+                    }
+                    return true;
+                }
+            } catch (PatternSyntaxException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid regular expression: " + ex.getMessage(),
+                        "Regex Error", JOptionPane.ERROR_MESSAGE);
+            }
+            return false;
         } else {
-            JOptionPane.showMessageDialog(this, "Text not found.", "Replace", JOptionPane.INFORMATION_MESSAGE);
+            boolean matches;
+            if (matchCase) {
+                matches = selectedText.equals(searchText);
+            } else {
+                matches = selectedText.equalsIgnoreCase(searchText);
+            }
+
+            if (matches) {
+                textArea.replaceSelection(replaceText);
+                if (findInSelectionBox.isSelected() && selectionStart >= 0) {
+                    int lengthDiff = replaceText.length() - searchText.length();
+                    selectionEnd += lengthDiff;
+                }
+                return true;
+            }
+            return false;
         }
     }
 
-    private void replaceNext() {
-        if (textArea.getSelectedText() != null && textArea.getSelectedText().length() > 0) {
-            textArea.replaceSelection(replaceField.getText());
-        }
+    /**
+     * Replaces the current match (if selected and matching) then finds the
+     * next occurrence of the search text. This allows iterative replace-then-advance
+     * workflows.
+     */
+    private void replaceAndFind() {
+        replace();
         findNext();
     }
 
+    /**
+     * Replaces all occurrences of the search text within the current search region
+     * with the replacement text. Rebuilds the affected region of the document in
+     * a single operation and updates the remembered selection bounds if applicable.
+     * Displays a count of replacements made.
+     */
     private void replaceAll() {
-        String search = searchField.getText();
-        String replace = replaceField.getText();
-        if (search.isEmpty()) return;
+        String searchText = searchField.getText();
+        if (searchText.isEmpty()) return;
 
-        String text = textArea.getText();
-        String newText;
-        if (caseSensitiveBox.isSelected()) {
-            newText = text.replace(search, replace);
-        } else {
-            newText = text.replaceAll("(?i)" + java.util.regex.Pattern.quote(search),
-                java.util.regex.Matcher.quoteReplacement(replace));
+        String replaceText = replaceField.getText();
+        String content = textArea.getText();
+        boolean matchCase = matchCaseBox.isSelected();
+        boolean useRegex = regexBox.isSelected();
+
+        // Process escape sequences if enabled (not applicable in regex mode)
+        if (!useRegex && escapesBox.isSelected()) {
+            searchText = processEscapes(searchText);
+            replaceText = processEscapes(replaceText);
         }
 
-        if (!newText.equals(text)) {
-            int caret = textArea.getCaretPosition();
-            textArea.setText(newText);
-            textArea.setCaretPosition(Math.min(caret, newText.length()));
+        int[] bounds = new int[2];
+        getSearchBounds(bounds);
+        int regionStart = bounds[0];
+        int regionEnd = bounds[1];
+
+        String searchIn = content.substring(regionStart, regionEnd);
+
+        if (useRegex) {
+            Pattern pattern;
+            try {
+                int flags = Pattern.MULTILINE | (matchCase ? 0 : Pattern.CASE_INSENSITIVE);
+                pattern = Pattern.compile(searchText, flags);
+            } catch (PatternSyntaxException ex) {
+                JOptionPane.showMessageDialog(this, "Invalid regular expression: " + ex.getMessage(),
+                        "Regex Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            Matcher matcher = pattern.matcher(searchIn);
+            int count = 0;
+            // Count matches first
+            while (matcher.find()) count++;
+            if (count == 0) {
+                JOptionPane.showMessageDialog(this, "Text not found.",
+                        "Replace All", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            // Perform replacement (supports $1, $2 capture group references)
+            matcher.reset();
+            String result = matcher.replaceAll(replaceText);
+
+            String newContent = content.substring(0, regionStart) + result + content.substring(regionEnd);
+            textArea.setText(newContent);
+            textArea.setCaretPosition(regionStart);
+
+            if (findInSelectionBox.isSelected() && selectionStart >= 0) {
+                selectionEnd = regionStart + result.length();
+            }
+
+            JOptionPane.showMessageDialog(this,
+                    count + " replacement" + (count != 1 ? "s" : "") + " made.",
+                    "Replace All", JOptionPane.INFORMATION_MESSAGE);
+        } else {
+            String compareIn = matchCase ? searchIn : searchIn.toLowerCase();
+            String compareText = matchCase ? searchText : searchText.toLowerCase();
+
+            StringBuilder result = new StringBuilder();
+            int count = 0;
+            int idx = 0;
+            while (true) {
+                int found = compareIn.indexOf(compareText, idx);
+                if (found < 0) {
+                    result.append(searchIn.substring(idx));
+                    break;
+                }
+                result.append(searchIn, idx, found);
+                result.append(replaceText);
+                count++;
+                idx = found + searchText.length();
+            }
+
+            if (count == 0) {
+                JOptionPane.showMessageDialog(this, "Text not found.",
+                        "Replace All", JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+
+            String newContent = content.substring(0, regionStart) + result + content.substring(regionEnd);
+            textArea.setText(newContent);
+            textArea.setCaretPosition(regionStart);
+
+            if (findInSelectionBox.isSelected() && selectionStart >= 0) {
+                selectionEnd = regionStart + result.length();
+            }
+
+            JOptionPane.showMessageDialog(this,
+                    count + " replacement" + (count != 1 ? "s" : "") + " made.",
+                    "Replace All", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 }
