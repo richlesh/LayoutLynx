@@ -75,6 +75,10 @@ A sample project is included in the `demo/` directory with an `index.html` and m
 - **Gson 2.10** — JSON parsing for preferences and AI API communication
 - **Maven** — Build tool with shade plugin for fat JAR packaging
 
+----
+ 
 ## License
 
-© 2026 Glowing Cat Software. All rights reserved.
+GNU General Public License v3.0 — see [LICENSE](LICENSE) for details.
+
+© 2026 Richard Lesh
