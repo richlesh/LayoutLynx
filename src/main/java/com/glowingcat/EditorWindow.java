@@ -71,6 +71,7 @@ public class EditorWindow {
     private static class TabInfo {
         RSyntaxTextArea textArea;
         RTextScrollPane scrollPane;
+        JComponent tabComponent; // the component added to the tab pane
         UndoManager undoManager;
         File file;
         boolean dirty;
@@ -80,6 +81,7 @@ public class EditorWindow {
         TabInfo(RSyntaxTextArea textArea, RTextScrollPane scrollPane, File file) {
             this.textArea = textArea;
             this.scrollPane = scrollPane;
+            this.tabComponent = scrollPane; // default: scrollPane is the tab component
             this.file = file;
             this.undoManager = new UndoManager();
             this.dirty = false;
@@ -297,6 +299,18 @@ public class EditorWindow {
         editMenu.add(pasteItem);
         editMenu.addSeparator();
         editMenu.add(selectAllItem);
+        editMenu.addSeparator();
+        JMenuItem tabsToSpacesItem = new JMenuItem("Convert Tabs to Spaces");
+        tabsToSpacesItem.addActionListener(e -> convertTabsToSpaces());
+        JMenuItem spacesToTabsItem = new JMenuItem("Convert Spaces to Tabs");
+        spacesToTabsItem.addActionListener(e -> convertSpacesToTabs());
+        editMenu.add(tabsToSpacesItem);
+        editMenu.add(spacesToTabsItem);
+        editMenu.addSeparator();
+        JMenuItem tidyItem = new JMenuItem("Tidy Document");
+        tidyItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_T, shortcutMask | KeyEvent.SHIFT_DOWN_MASK));
+        tidyItem.addActionListener(e -> tidyDocument());
+        editMenu.add(tidyItem);
         menuBar.add(editMenu);
 
         // --- Search menu ---
@@ -518,16 +532,23 @@ public class EditorWindow {
         togglePanel.setOpaque(false);
 
         // Hidden characters toggle button
-        hiddenCharsToggle = new JToggleButton("¶", false);
+        ImageIcon hiddenCharsIcon = null;
+        var hiddenCharsUrl = getClass().getClassLoader().getResource("hidden_chars.png");
+        if (hiddenCharsUrl != null) {
+            hiddenCharsIcon = new ImageIcon(new ImageIcon(hiddenCharsUrl).getImage().getScaledInstance(20, 20, Image.SCALE_SMOOTH));
+        }
+        hiddenCharsToggle = new JToggleButton(hiddenCharsIcon != null ? hiddenCharsIcon : null, false);
+        if (hiddenCharsIcon == null) hiddenCharsToggle.setText("¶");
         hiddenCharsToggle.setToolTipText("Show/Hide Invisible Characters");
         hiddenCharsToggle.setFocusPainted(false);
         hiddenCharsToggle.setBorderPainted(false);
         hiddenCharsToggle.setContentAreaFilled(false);
+        hiddenCharsToggle.setOpaque(false);
         hiddenCharsToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        hiddenCharsToggle.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
+        hiddenCharsToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
         hiddenCharsToggle.addActionListener(e -> {
             hiddenCharsVisible = hiddenCharsToggle.isSelected();
-            hiddenCharsToggle.setBackground(hiddenCharsVisible ? new Color(200, 140, 60) : null);
+            hiddenCharsToggle.setBackground(hiddenCharsVisible ? new Color(218, 165, 32) : null);
             hiddenCharsToggle.setContentAreaFilled(hiddenCharsVisible);
             hiddenCharsToggle.setOpaque(hiddenCharsVisible);
             // Apply to all open tabs
@@ -551,8 +572,9 @@ public class EditorWindow {
         previewToggle.setBorderPainted(false);
         previewToggle.setContentAreaFilled(true);
         previewToggle.setOpaque(true);
-        previewToggle.setBackground(new Color(200, 140, 60));
+        previewToggle.setBackground(new Color(218, 165, 32));
         previewToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        previewToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
         previewToggle.addActionListener(e -> togglePreview());
         togglePanel.add(previewToggle);
 
@@ -569,8 +591,9 @@ public class EditorWindow {
         aiToggle.setBorderPainted(false);
         aiToggle.setContentAreaFilled(true);
         aiToggle.setOpaque(true);
-        aiToggle.setBackground(new Color(200, 140, 60));
+        aiToggle.setBackground(new Color(218, 165, 32));
         aiToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        aiToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
         aiToggle.addActionListener(e -> toggleAI());
         togglePanel.add(aiToggle);
 
@@ -583,6 +606,12 @@ public class EditorWindow {
         fileTree = new JTree(treeModel);
         fileTree.setRootVisible(true);
         fileTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+        // Use document icon for all nodes (no folder icons)
+        javax.swing.tree.DefaultTreeCellRenderer treeRenderer = new javax.swing.tree.DefaultTreeCellRenderer();
+        Icon docIcon = treeRenderer.getLeafIcon();
+        treeRenderer.setOpenIcon(docIcon);
+        treeRenderer.setClosedIcon(docIcon);
+        fileTree.setCellRenderer(treeRenderer);
         fileTree.addTreeSelectionListener(e -> {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) fileTree.getLastSelectedPathComponent();
             if (node == null || node.getUserObject() == null) return;
@@ -611,7 +640,7 @@ public class EditorWindow {
         editorPreviewSplit.setResizeWeight(0.5);
 
         // --- Split: (Tree+Editor+Preview) | AI ---
-        aiChatPanel = new AIChatPanel(preferences);
+        aiChatPanel = new AIChatPanel(this::getActiveTextArea, preferences);
         mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, editorPreviewSplit, aiChatPanel);
         mainSplit.setResizeWeight(1.0);
         mainSplit.setDividerLocation(frame.getWidth() - 380);
@@ -664,7 +693,7 @@ public class EditorWindow {
         }
         editorPreviewSplit.revalidate();
         editorPreviewSplit.repaint();
-        previewToggle.setBackground(previewVisible ? new Color(200, 140, 60) : null);
+        previewToggle.setBackground(previewVisible ? new Color(218, 165, 32) : null);
         previewToggle.setContentAreaFilled(previewVisible);
         previewToggle.setOpaque(previewVisible);
     }
@@ -686,7 +715,7 @@ public class EditorWindow {
         }
         mainSplit.revalidate();
         mainSplit.repaint();
-        aiToggle.setBackground(aiVisible ? new Color(200, 140, 60) : null);
+        aiToggle.setBackground(aiVisible ? new Color(218, 165, 32) : null);
         aiToggle.setContentAreaFilled(aiVisible);
         aiToggle.setOpaque(aiVisible);
     }
@@ -700,7 +729,7 @@ public class EditorWindow {
         if (idx < 0) return null;
         Component comp = editorTabs.getComponentAt(idx);
         for (TabInfo tab : openTabs.values()) {
-            if (tab.scrollPane == comp) return tab;
+            if (tab.tabComponent == comp) return tab;
         }
         return null;
     }
@@ -716,13 +745,34 @@ public class EditorWindow {
         textArea.setCodeFoldingEnabled(true);
         textArea.setAntiAliasingEnabled(true);
         textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
-        textArea.setTabSize(4);
-        textArea.setTabsEmulated(true);
+        textArea.setHighlightCurrentLine(false);
+        textArea.setSelectionColor(preferences.getHighlightColorObj());
+        textArea.setTabSize(preferences.getTabSize());
+        textArea.setTabsEmulated(!preferences.isUseTabs());
+        textArea.setTokenPainterFactory(new CustomTokenPainterFactory());
+
+        // Disable colored backgrounds for embedded CSS/JS in HTML files
+        if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(syntaxStyle)) {
+            textArea.setSecondaryLanguageBackground(1, null);
+            textArea.setSecondaryLanguageBackground(2, null);
+            textArea.setSecondaryLanguageBackground(3, null);
+        }
 
         RTextScrollPane scrollPane = new RTextScrollPane(textArea);
         scrollPane.setFoldIndicatorEnabled(true);
 
         TabInfo tabInfo = new TabInfo(textArea, scrollPane, file);
+
+        // Add color swatch gutter and specificity tooltip only for CSS files
+        if (SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntaxStyle)) {
+            CssSpecificityTooltip.install(textArea);
+            ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
+            swatchPanel.setEditorScrollPane(scrollPane);
+            JPanel editorWithSwatches = new JPanel(new BorderLayout());
+            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
+            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
+            tabInfo.tabComponent = editorWithSwatches;
+        }
 
         // Wire up undo and document change listener
         textArea.getDocument().addUndoableEditListener(tabInfo.undoManager);
@@ -736,15 +786,15 @@ public class EditorWindow {
         File key = file != null ? file : new File(title + "_" + System.nanoTime());
         openTabs.put(key, tabInfo);
 
-        editorTabs.addTab(title, scrollPane);
-        editorTabs.setSelectedComponent(scrollPane);
+        editorTabs.addTab(title, tabInfo.tabComponent);
+        SwingUtilities.invokeLater(() -> editorTabs.setSelectedComponent(tabInfo.tabComponent));
     }
 
     private void openFileInTab(File file) {
         // Check if already open
         if (openTabs.containsKey(file)) {
             TabInfo tab = openTabs.get(file);
-            editorTabs.setSelectedComponent(tab.scrollPane);
+            editorTabs.setSelectedComponent(tab.tabComponent);
             return;
         }
 
@@ -760,13 +810,34 @@ public class EditorWindow {
         textArea.setCodeFoldingEnabled(true);
         textArea.setAntiAliasingEnabled(true);
         textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
-        textArea.setTabSize(4);
-        textArea.setTabsEmulated(true);
+        textArea.setHighlightCurrentLine(false);
+        textArea.setSelectionColor(preferences.getHighlightColorObj());
+        textArea.setTabSize(preferences.getTabSize());
+        textArea.setTabsEmulated(!preferences.isUseTabs());
+        textArea.setTokenPainterFactory(new CustomTokenPainterFactory());
+
+        // Disable colored backgrounds for embedded CSS/JS in HTML files
+        if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(syntaxStyle)) {
+            textArea.setSecondaryLanguageBackground(1, null);
+            textArea.setSecondaryLanguageBackground(2, null);
+            textArea.setSecondaryLanguageBackground(3, null);
+        }
 
         RTextScrollPane scrollPane = new RTextScrollPane(textArea);
         scrollPane.setFoldIndicatorEnabled(true);
 
         TabInfo tabInfo = new TabInfo(textArea, scrollPane, file);
+
+        // Add color swatch gutter and specificity tooltip only for CSS files
+        if (SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntaxStyle)) {
+            CssSpecificityTooltip.install(textArea);
+            ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
+            swatchPanel.setEditorScrollPane(scrollPane);
+            JPanel editorWithSwatches = new JPanel(new BorderLayout());
+            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
+            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
+            tabInfo.tabComponent = editorWithSwatches;
+        }
 
         // Load file content
         try {
@@ -793,8 +864,110 @@ public class EditorWindow {
         });
 
         openTabs.put(file, tabInfo);
-        editorTabs.addTab(file.getName(), scrollPane);
-        editorTabs.setSelectedComponent(scrollPane);
+        editorTabs.addTab(file.getName(), tabInfo.tabComponent);
+        SwingUtilities.invokeLater(() -> editorTabs.setSelectedComponent(tabInfo.tabComponent));
+    }
+
+    /**
+     * Opens a file in a tab (if not already open) and highlights the given selector text.
+     * Called from the computed styles dialog to navigate to the source of a property.
+     *
+     * @param fileName the CSS filename (e.g. "styles1.css"), or null to target the HTML file
+     * @param selector the CSS selector text to find and highlight (e.g. "h1", ".container")
+     */
+    public void navigateToSelector(String fileName, String selector) {
+        if (htmlFile == null || selector == null) return;
+
+        // Determine target file: null fileName means the HTML file itself (inline <style>)
+        File targetFile;
+        if (fileName == null) {
+            targetFile = htmlFile;
+        } else {
+            targetFile = new File(htmlFile.getParentFile(), fileName);
+            if (!targetFile.isFile()) return;
+        }
+
+        // Open the file in a tab (switches to it if already open)
+        openFileInTab(targetFile);
+
+        // Bring editor frame to front so selection shows in active color
+        frame.toFront();
+
+        // Find and highlight the selector in the text area
+        TabInfo tab = openTabs.get(targetFile);
+        if (tab == null) return;
+
+        SwingUtilities.invokeLater(() -> {
+            RSyntaxTextArea textArea = tab.textArea;
+            String text = textArea.getText();
+            String searchPattern = selector.trim();
+            int index = -1;
+
+            // For HTML files, constrain search to within <style> blocks
+            boolean isHtml = targetFile.getName().toLowerCase().matches(".*\\.html?$");
+            int searchStart = 0;
+            int searchEnd = text.length();
+
+            if (isHtml) {
+                // Find the selector only within <style>...</style> regions
+                String lower = text.toLowerCase();
+                int styleStart = 0;
+                while (styleStart < lower.length()) {
+                    int openTag = lower.indexOf("<style", styleStart);
+                    if (openTag < 0) break;
+                    int openEnd = lower.indexOf(">", openTag);
+                    if (openEnd < 0) break;
+                    int closeTag = lower.indexOf("</style", openEnd);
+                    if (closeTag < 0) closeTag = text.length();
+
+                    // Search within this <style> block
+                    int pos = openEnd + 1;
+                    while (pos < closeTag) {
+                        int found = text.indexOf(searchPattern, pos);
+                        if (found < 0 || found >= closeTag) break;
+                        int end = found + searchPattern.length();
+                        String after = text.substring(end, closeTag).stripLeading();
+                        if (after.startsWith("{") || after.startsWith(",")) {
+                            index = found;
+                            break;
+                        }
+                        pos = found + 1;
+                    }
+                    if (index >= 0) break;
+                    styleStart = closeTag + 8;
+                }
+            } else {
+                // For CSS files, search the entire file
+                int pos = 0;
+                while (pos < text.length()) {
+                    int found = text.indexOf(searchPattern, pos);
+                    if (found < 0) break;
+                    int end = found + searchPattern.length();
+                    if (end <= text.length()) {
+                        String after = text.substring(end).stripLeading();
+                        if (after.startsWith("{") || after.startsWith(",")) {
+                            index = found;
+                            break;
+                        }
+                    }
+                    pos = found + 1;
+                }
+
+                // Fallback: simple text search
+                if (index < 0) {
+                    index = text.indexOf(searchPattern);
+                }
+            }
+
+            if (index >= 0) {
+                textArea.setCaretPosition(index);
+                textArea.select(index, index + searchPattern.length());
+                // Ensure the text area has focus so the selection renders in active color
+                frame.toFront();
+                frame.requestFocus();
+                textArea.requestFocusInWindow();
+            }
+        });
     }
 
     private void onTabContentChanged(TabInfo tab) {
@@ -802,7 +975,7 @@ public class EditorWindow {
             tab.dirty = true;
             // Mark tab title with asterisk
             for (int i = 0; i < editorTabs.getTabCount(); i++) {
-                if (editorTabs.getComponentAt(i) == tab.scrollPane) {
+                if (editorTabs.getComponentAt(i) == tab.tabComponent) {
                     String title = editorTabs.getTitleAt(i);
                     if (!title.startsWith("*")) {
                         editorTabs.setTitleAt(i, "*" + title);
@@ -811,7 +984,10 @@ public class EditorWindow {
                 }
             }
         }
-        updatePreview();
+        // Only live-reload preview for HTML changes, not CSS
+        if (tab.file != null && tab.file.equals(htmlFile)) {
+            updatePreview();
+        }
     }
 
     // =========================================================================
@@ -855,14 +1031,19 @@ public class EditorWindow {
 
         // Parse HTML for linked CSS files
         List<File> cssFiles = parseCSSReferences(file);
-        for (File css : cssFiles) {
-            DefaultMutableTreeNode cssNode = new DefaultMutableTreeNode(new FileNodeData(css.getName(), css));
-            rootNode.add(cssNode);
-        }
 
-        // Add "Local" node for inline styles
+        // Add "Local" node first (most recently applied / highest specificity)
         DefaultMutableTreeNode localNode = new DefaultMutableTreeNode(new FileNodeData("Local (inline styles)", file));
         rootNode.add(localNode);
+
+        // Add CSS files in reverse order (last linked = applied later = higher priority)
+        for (int i = cssFiles.size() - 1; i >= 0; i--) {
+            File css = cssFiles.get(i);
+            DefaultMutableTreeNode cssNode = new DefaultMutableTreeNode(new FileNodeData(css.getName(), css));
+            rootNode.add(cssNode);
+            // Recursively add @import children
+            addCssImportNodes(cssNode, css, new java.util.HashSet<>());
+        }
 
         treeModel.reload();
         fileTree.expandRow(0);
@@ -870,12 +1051,26 @@ public class EditorWindow {
         // Open the HTML file in a tab
         openFileInTab(file);
 
-        // Open each CSS file in a tab
+        // Open each CSS file and its @imports in tabs
+        java.util.Set<String> openedCss = new java.util.HashSet<>();
         for (File css : cssFiles) {
-            openFileInTab(css);
+            openCssAndImports(css, openedCss);
         }
 
         updatePreview();
+    }
+
+    /**
+     * Recursively opens a CSS file and all its @import dependencies in editor tabs.
+     */
+    private void openCssAndImports(File cssFile, java.util.Set<String> opened) {
+        String path;
+        try { path = cssFile.getCanonicalPath(); } catch (IOException e) { path = cssFile.getAbsolutePath(); }
+        if (!opened.add(path)) return;
+        openFileInTab(cssFile);
+        for (File imported : parseCssImports(cssFile)) {
+            openCssAndImports(imported, opened);
+        }
     }
 
     /**
@@ -908,6 +1103,57 @@ public class EditorWindow {
         return cssFiles;
     }
 
+    /**
+     * Recursively adds @import references from a CSS file as child nodes in the tree.
+     * Uses a visited set to prevent infinite loops from circular imports.
+     */
+    private void addCssImportNodes(DefaultMutableTreeNode parentNode, File cssFile, java.util.Set<String> visited) {
+        String canonicalPath;
+        try {
+            canonicalPath = cssFile.getCanonicalPath();
+        } catch (IOException e) {
+            canonicalPath = cssFile.getAbsolutePath();
+        }
+        if (!visited.add(canonicalPath)) return; // already visited, prevent cycles
+
+        List<File> imports = parseCssImports(cssFile);
+        // Reverse order: last @import = applied later = higher priority = shown first
+        for (int i = imports.size() - 1; i >= 0; i--) {
+            File imported = imports.get(i);
+            DefaultMutableTreeNode childNode = new DefaultMutableTreeNode(new FileNodeData(imported.getName(), imported));
+            parentNode.add(childNode);
+            addCssImportNodes(childNode, imported, visited);
+        }
+    }
+
+    /**
+     * Parses a CSS file to find @import rules and returns the referenced files.
+     * Supports: @import url("file.css"), @import url('file.css'), @import "file.css", @import 'file.css'
+     */
+    private List<File> parseCssImports(File cssFile) {
+        List<File> imports = new ArrayList<>();
+        try {
+            String content = Files.readString(cssFile.toPath(), StandardCharsets.UTF_8);
+            // Match @import url("...") or @import url('...') or @import "..." or @import '...'
+            Pattern pattern = Pattern.compile(
+                "@import\\s+(?:url\\s*\\(\\s*[\"']?([^\"')]+)[\"']?\\s*\\)|[\"']([^\"']+)[\"'])",
+                Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(content);
+            while (matcher.find()) {
+                String path = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+                if (path != null && !path.startsWith("http://") && !path.startsWith("https://")) {
+                    File importedFile = new File(cssFile.getParentFile(), path);
+                    if (importedFile.exists()) {
+                        imports.add(importedFile);
+                    }
+                }
+            }
+        } catch (IOException e) {
+            // Best effort
+        }
+        return imports;
+    }
+
     private void saveFile() {
         TabInfo tab = getActiveTab();
         if (tab == null) return;
@@ -929,7 +1175,7 @@ public class EditorWindow {
             tab.file = file;
             // Update tab title
             for (int i = 0; i < editorTabs.getTabCount(); i++) {
-                if (editorTabs.getComponentAt(i) == tab.scrollPane) {
+                if (editorTabs.getComponentAt(i) == tab.tabComponent) {
                     editorTabs.setTitleAt(i, file.getName());
                     break;
                 }
@@ -948,13 +1194,18 @@ public class EditorWindow {
             tab.lastModifiedOnDisk = file.lastModified();
             // Remove asterisk from tab title
             for (int i = 0; i < editorTabs.getTabCount(); i++) {
-                if (editorTabs.getComponentAt(i) == tab.scrollPane) {
+                if (editorTabs.getComponentAt(i) == tab.tabComponent) {
                     String title = editorTabs.getTitleAt(i);
                     if (title.startsWith("*")) {
                         editorTabs.setTitleAt(i, title.substring(1));
                     }
                     break;
                 }
+            }
+            // Force preview reload when saving CSS files
+            String name = file.getName().toLowerCase();
+            if (name.endsWith(".css")) {
+                forcePreviewReload();
             }
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(frame, "Error saving file: " + ex.getMessage(),
@@ -986,17 +1237,39 @@ public class EditorWindow {
 
     private void updatePreview() {
         if (!previewVisible || htmlFile == null) return;
-        // Rebuild HTML content with current CSS for preview
         try {
-            String htmlContent = Files.readString(htmlFile.toPath(), StandardCharsets.UTF_8);
-            // The preview panel will load the HTML file directly from disk
-            // For live preview, we inject the current editor state
-            previewPanel.updateContent(htmlFile, htmlContent);
+            TabInfo htmlTab = openTabs.get(htmlFile);
+            String content = htmlTab != null ? htmlTab.textArea.getText()
+                : Files.readString(htmlFile.toPath(), StandardCharsets.UTF_8);
+            previewPanel.updateContent(htmlFile, content);
         } catch (IOException e) {
-            // Use whatever we have in the HTML tab
             TabInfo htmlTab = openTabs.get(htmlFile);
             if (htmlTab != null) {
                 previewPanel.updateContent(htmlFile, htmlTab.textArea.getText());
+            }
+        }
+    }
+
+    /**
+     * Forces a full preview reload with cache-busting on CSS references.
+     * Called after saving a CSS file to ensure the preview picks up the new styles.
+     */
+    private void forcePreviewReload() {
+        if (!previewVisible || htmlFile == null) return;
+        try {
+            TabInfo htmlTab = openTabs.get(htmlFile);
+            String content = htmlTab != null ? htmlTab.textArea.getText()
+                : Files.readString(htmlFile.toPath(), StandardCharsets.UTF_8);
+            String cacheBust = "?_t=" + System.currentTimeMillis();
+            content = content.replaceAll("(\\.css)([\"'])", "$1" + cacheBust + "$2");
+            previewPanel.updateContent(htmlFile, content);
+        } catch (IOException e) {
+            TabInfo htmlTab = openTabs.get(htmlFile);
+            if (htmlTab != null) {
+                String content = htmlTab.textArea.getText();
+                String cacheBust = "?_t=" + System.currentTimeMillis();
+                content = content.replaceAll("(\\.css)([\"'])", "$1" + cacheBust + "$2");
+                previewPanel.updateContent(htmlFile, content);
             }
         }
     }
@@ -1035,7 +1308,7 @@ public class EditorWindow {
         PreferencesDialog dialog = new PreferencesDialog(frame, preferences);
         dialog.setVisible(true);
         if (dialog.isConfirmed()) {
-            preferences = dialog.getUpdatedPreferences();
+            dialog.applyTo(preferences);
             preferences.save();
             applyPreferences();
         }
@@ -1092,6 +1365,81 @@ public class EditorWindow {
     private void applyPreferences() {
         for (TabInfo tab : openTabs.values()) {
             tab.textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
+            tab.textArea.setTabSize(preferences.getTabSize());
+            tab.textArea.setTabsEmulated(!preferences.isUseTabs());
+            tab.textArea.setSelectionColor(preferences.getHighlightColorObj());
+        }
+        if (aiChatPanel != null) aiChatPanel.updateFont();
+    }
+
+    private void convertTabsToSpaces() {
+        TabInfo tab = getActiveTab();
+        if (tab == null) return;
+        int tabSize = preferences.getTabSize();
+        String spaces = " ".repeat(tabSize);
+        String text = tab.textArea.getText();
+        String converted = text.replace("\t", spaces);
+        if (!converted.equals(text)) {
+            int caret = tab.textArea.getCaretPosition();
+            tab.textArea.setText(converted);
+            tab.textArea.setCaretPosition(Math.min(caret, converted.length()));
+        }
+    }
+
+    private void convertSpacesToTabs() {
+        TabInfo tab = getActiveTab();
+        if (tab == null) return;
+        int tabSize = preferences.getTabSize();
+        String spaces = " ".repeat(tabSize);
+        String text = tab.textArea.getText();
+        // Only convert leading spaces on each line to preserve alignment intent
+        StringBuilder sb = new StringBuilder();
+        for (String line : text.split("\n", -1)) {
+            int i = 0;
+            while (i + tabSize <= line.length() && line.substring(i, i + tabSize).equals(spaces)) {
+                sb.append('\t');
+                i += tabSize;
+            }
+            sb.append(line.substring(i));
+            sb.append('\n');
+        }
+        // Remove trailing newline added by split processing
+        if (!text.endsWith("\n") && sb.length() > 0 && sb.charAt(sb.length() - 1) == '\n') {
+            sb.setLength(sb.length() - 1);
+        }
+        String converted = sb.toString();
+        if (!converted.equals(text)) {
+            int caret = tab.textArea.getCaretPosition();
+            tab.textArea.setText(converted);
+            tab.textArea.setCaretPosition(Math.min(caret, converted.length()));
+        }
+    }
+
+    private void tidyDocument() {
+        TabInfo tab = getActiveTab();
+        if (tab == null) return;
+
+        String input = tab.textArea.getText();
+        String syntax = tab.textArea.getSyntaxEditingStyle();
+        boolean isCss = SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntax);
+
+        // Show options dialog
+        TidyOptionsDialog options = new TidyOptionsDialog(frame, preferences, isCss);
+        options.setVisible(true);
+        if (!options.isConfirmed()) return;
+
+        // Format using js-beautify via GraalJS
+        String formatted;
+        if (isCss) {
+            formatted = JsBeautifyFormatter.formatCss(input, options.getCssOptionsJson());
+        } else {
+            formatted = JsBeautifyFormatter.formatHtml(input, options.getHtmlOptionsJson());
+        }
+
+        if (formatted != null && !formatted.equals(input)) {
+            int caret = tab.textArea.getCaretPosition();
+            tab.textArea.setText(formatted);
+            tab.textArea.setCaretPosition(Math.min(caret, formatted.length()));
         }
     }
 
