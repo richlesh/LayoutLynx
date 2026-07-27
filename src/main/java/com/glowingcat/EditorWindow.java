@@ -998,19 +998,7 @@ public class EditorWindow {
      * falling back to literal search. Returns the offset within the block, or -1.
      */
     private int findSelectorInBlock(String block, String literal, java.util.regex.Pattern flexPattern) {
-        // Try flexible regex first
-        if (flexPattern != null) {
-            java.util.regex.Matcher m = flexPattern.matcher(block);
-            while (m.find()) {
-                int end = m.end();
-                String after = block.substring(end).stripLeading();
-                if (after.startsWith("{") || after.startsWith(",")) {
-                    return m.start();
-                }
-            }
-        }
-
-        // Fall back to literal search
+        // Try literal search first (exact match, won't false-match inside comments)
         int pos = 0;
         while (pos < block.length()) {
             int found = block.indexOf(literal, pos);
@@ -1024,6 +1012,19 @@ public class EditorWindow {
             }
             pos = found + 1;
         }
+
+        // Fall back to flexible regex (handles reformatted whitespace)
+        if (flexPattern != null) {
+            java.util.regex.Matcher m = flexPattern.matcher(block);
+            while (m.find()) {
+                int end = m.end();
+                String after = block.substring(end).stripLeading();
+                if (after.startsWith("{") || after.startsWith(",")) {
+                    return m.start();
+                }
+            }
+        }
+
         return -1;
     }
 
