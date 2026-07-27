@@ -533,9 +533,13 @@ public class PreviewPanel extends JPanel {
         StringBuilder sb = new StringBuilder();
         while (matcher.find()) {
             String srcsetValue = matcher.group(2);
-            String resolved = embedSrcsetValue(baseDir, srcsetValue);
-            matcher.appendReplacement(sb,
-                java.util.regex.Matcher.quoteReplacement(matcher.group(1) + resolved + matcher.group(3)));
+            try {
+                String resolved = embedSrcsetValue(baseDir, srcsetValue);
+                matcher.appendReplacement(sb,
+                    java.util.regex.Matcher.quoteReplacement(matcher.group(1) + resolved + matcher.group(3)));
+            } catch (Exception e) {
+                matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(matcher.group()));
+            }
         }
         matcher.appendTail(sb);
 
@@ -547,9 +551,13 @@ public class PreviewPanel extends JPanel {
         StringBuilder sb2 = new StringBuilder();
         while (matcher.find()) {
             String srcsetValue = matcher.group(2);
-            String resolved = embedSrcsetValue(baseDir, srcsetValue);
-            matcher.appendReplacement(sb2,
-                java.util.regex.Matcher.quoteReplacement(matcher.group(1) + resolved + matcher.group(3)));
+            try {
+                String resolved = embedSrcsetValue(baseDir, srcsetValue);
+                matcher.appendReplacement(sb2,
+                    java.util.regex.Matcher.quoteReplacement(matcher.group(1) + resolved + matcher.group(3)));
+            } catch (Exception e) {
+                matcher.appendReplacement(sb2, java.util.regex.Matcher.quoteReplacement(matcher.group()));
+            }
         }
         matcher.appendTail(sb2);
 
@@ -597,13 +605,17 @@ public class PreviewPanel extends JPanel {
                 || path.startsWith("#") || path.startsWith("//") || path.isEmpty()) {
             return path;
         }
-        String decoded = path.replace("%20", " ");
-        File imgFile = new File(baseDir, decoded);
-        if (imgFile.isFile()) {
-            String dataUri = toDataUri(imgFile);
-            if (dataUri != null) {
-                return dataUri;
+        try {
+            String decoded = path.replace("%20", " ");
+            File imgFile = new File(baseDir, decoded);
+            if (imgFile.isFile()) {
+                String dataUri = toDataUri(imgFile);
+                if (dataUri != null) {
+                    return dataUri;
+                }
             }
+        } catch (Exception e) {
+            // If anything fails for this image, keep the original path
         }
         return path;
     }
