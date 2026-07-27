@@ -442,20 +442,19 @@ public class PreviewPanel extends JPanel {
             if (webEngine == null) return;
             if (htmlFile != null) {
                 String processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
-                // Inject a <base> tag pointing to the HTML file's directory so that
-                // relative resource paths (images, fonts, etc.) resolve correctly
-                // regardless of where the temp preview file is located.
-                String baseUrl = htmlFile.getParentFile().toURI().toString();
-                String withBase = injectBaseTag(processed, baseUrl);
+                // Resolve relative resource paths (images, scripts, etc.) to absolute
+                // file:// URIs. JavaFX WebView doesn't reliably support <base href> for
+                // file:// resources when the page is loaded from a temp file.
+                processed = resolveRelativePaths(htmlFile.getParentFile(), processed);
                 try {
                     if (previewTempFile == null) {
                         previewTempFile = java.io.File.createTempFile("layoutlynx_preview", ".html");
                         previewTempFile.deleteOnExit();
                     }
-                    java.nio.file.Files.writeString(previewTempFile.toPath(), withBase);
+                    java.nio.file.Files.writeString(previewTempFile.toPath(), processed);
                     webEngine.load(previewTempFile.toURI().toString());
                 } catch (java.io.IOException e) {
-                    webEngine.loadContent(withBase, "text/html");
+                    webEngine.loadContent(processed, "text/html");
                 }
             } else {
                 webEngine.loadContent(htmlContent, "text/html");
@@ -464,23 +463,36 @@ public class PreviewPanel extends JPanel {
     }
 
     /**
-     * Injects a &lt;base href="..."&gt; tag into the HTML so that relative resource
-     * paths (images, etc.) resolve correctly even when the file is loaded from a
-     * different location.
+     * Resolves relative paths in src and href attributes to absolute file:// URIs.
+     * This ensures images, scripts, and other resources load correctly in the preview
+     * even when the HTML is rendered from a temp file in a different directory.
      */
-    private String injectBaseTag(String html, String baseUrl) {
-        // Insert <base> as the first child of <head>, or before the first tag if no <head>
-        String baseTag = "<base href=\"" + baseUrl + "\">";
-        String lowerHtml = html.toLowerCase();
-        int headIdx = lowerHtml.indexOf("<head");
-        if (headIdx >= 0) {
-            int headClose = html.indexOf('>', headIdx);
-            if (headClose >= 0) {
-                return html.substring(0, headClose + 1) + "\n" + baseTag + "\n" + html.substring(headClose + 1);
+    private String resolveRelativePaths(File baseDir, String html) {
+        // Match src="..." and href="..." attributes (but not data-href which we use for CSS)
+        java.util.regex.Pattern attrPattern = java.util.regex.Pattern.compile(
+            "((?:src|poster|srcset)\\s*=\\s*\")([^\"]+)(\")",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        java.util.regex.Matcher matcher = attrPattern.matcher(html);
+        StringBuilder sb = new StringBuilder();
+        while (matcher.find()) {
+            String path = matcher.group(2);
+            // Skip absolute URLs, data URIs, and fragment-only refs
+            if (path.startsWith("http://") || path.startsWith("https://")
+                    || path.startsWith("data:") || path.startsWith("file://")
+                    || path.startsWith("#") || path.startsWith("//")) {
+                matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(matcher.group()));
+                continue;
             }
+            // Resolve relative path to absolute file URI
+            String decodedPath = path.replace("%20", " ");
+            File resolved = new File(baseDir, decodedPath);
+            String absoluteUri = resolved.toURI().toString();
+            matcher.appendReplacement(sb,
+                java.util.regex.Matcher.quoteReplacement(matcher.group(1) + absoluteUri + matcher.group(3)));
         }
-        // No <head> found — prepend <base> before the content
-        return baseTag + "\n" + html;
+        matcher.appendTail(sb);
+        return sb.toString();
     }
 
     /**

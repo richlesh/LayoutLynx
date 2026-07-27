@@ -145,8 +145,8 @@ jobs:
             export PATH="$GITHUB_WORKSPACE/wix:$PATH"
           fi
 
-          MODULES="javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject,jdk.unsupported"
-          JAVA_OPTS="--enable-native-access=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED"
+          MODULES="javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject,jdk.unsupported,jdk.internal.vm.ci,java.management,jdk.management"
+          JAVA_OPTS="--enable-native-access=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/jdk.internal.misc=ALL-UNNAMED"
 
           if [ "${{ runner.os }}" = "macOS" ]; then
             jpackage \
