@@ -1,0 +1,460 @@
+name: Build Native Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. 1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  package:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+            icon: src/main/resources/app_icon.icns
+            pkg_type: dmg
+            label: macos-arm64
+          - os: windows-latest
+            arch: x64
+            icon: src/main/resources/app_icon.ico
+            pkg_type: msi
+            label: windows-x64
+          - os: windows-11-arm
+            arch: arm64
+            icon: src/main/resources/app_icon.ico
+            pkg_type: msi
+            label: windows-arm64
+          - os: ubuntu-22.04
+            arch: x64
+            icon: src/main/resources/app_icon_256.png
+            pkg_type: deb
+            label: linux-x64-deb
+          - os: ubuntu-22.04
+            arch: x64
+            icon: src/main/resources/app_icon_256.png
+            pkg_type: rpm
+            label: linux-x64-rpm
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            icon: src/main/resources/app_icon_256.png
+            pkg_type: deb
+            label: linux-arm64-deb
+          - os: ubuntu-24.04-arm
+            arch: arm64
+            icon: src/main/resources/app_icon_256.png
+            pkg_type: rpm
+            label: linux-arm64-rpm
+
+    runs-on: ${{ matrix.os }}
+    name: Package (${{ matrix.label }})
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: liberica
+          java-version: '21'
+          java-package: jdk+fx
+          cache: maven
+
+      - name: Normalize version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "APP_VERSION=${VERSION#v}" >> $GITHUB_ENV
+
+      - name: Import Developer ID certificate (macOS)
+        if: runner.os == 'macOS'
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+          KEYCHAIN_PASSWORD=build-keychain-password
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          echo "$CERTIFICATE_BASE64" | base64 --decode -o $RUNNER_TEMP/cert.p12
+          security import $RUNNER_TEMP/cert.p12 -k $KEYCHAIN_PATH -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+      - name: Build fat JAR
+        shell: bash
+        run: |
+          MAVEN_OPTS=""
+          if [ "${{ runner.os }}" = "Linux" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            MAVEN_OPTS="-Djavafx.platform=linux"
+          elif [ "${{ runner.os }}" = "Windows" ] && [ "${{ matrix.arch }}" = "arm64" ]; then
+            MAVEN_OPTS="-Djavafx.platform=win"
+          fi
+          mvn clean package -DskipTests=true $MAVEN_OPTS
+          mkdir -p lib
+          cp target/LayoutLynx-*.jar lib/
+          # Determine the actual jar filename for jpackage
+          JARFILE=$(ls lib/LayoutLynx-*.jar | head -1 | xargs basename)
+          echo "JARFILE=$JARFILE" >> $GITHUB_ENV
+
+      - name: Install RPM tools (Linux RPM)
+        if: matrix.pkg_type == 'rpm'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Install WiX Toolset (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -L -o wix314-binaries.zip https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip
+          mkdir -p wix
+          unzip -q wix314-binaries.zip -d wix
+          echo "$PWD/wix" >> $GITHUB_PATH
+
+      - name: Run jpackage
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            jpackage \
+              --input lib \
+              --main-jar ${{ env.JARFILE }} \
+              --main-class com.glowingcat.Main \
+              --name LayoutLynx \
+              --app-version "${{ env.APP_VERSION }}" \
+              --vendor "Glowing Cat" \
+              --copyright "(C) 2026 Glowing Cat" \
+              --description "A lightweight HTML/CSS editor with live preview" \
+              --icon "${{ matrix.icon }}" \
+              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki \
+              --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
+              --type app-image
+          elif [ "${{ runner.os }}" = "Linux" ]; then
+            jpackage \
+              --input lib \
+              --main-jar ${{ env.JARFILE }} \
+              --main-class com.glowingcat.Main \
+              --name LayoutLynx \
+              --app-version "${{ env.APP_VERSION }}" \
+              --vendor "Glowing Cat" \
+              --copyright "(C) 2026 Glowing Cat" \
+              --description "A lightweight HTML/CSS editor with live preview" \
+              --icon "${{ matrix.icon }}" \
+              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki \
+              --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
+              --java-options "-Dawt.useSystemAAFontSettings=on" \
+              --type app-image
+
+            # Remove native sound libraries to eliminate libasound2 dependency
+            find LayoutLynx -name "libjsound*.so" -delete
+
+            # Remove bundled libjpeg to eliminate libjpeg-turbo8 dependency
+            find LayoutLynx -name "libjpeg*" -delete
+
+            # Package from the app-image
+            jpackage \
+              --app-image LayoutLynx \
+              --name LayoutLynx \
+              --app-version "${{ env.APP_VERSION }}" \
+              --vendor "Glowing Cat" \
+              --copyright "(C) 2026 Glowing Cat" \
+              --description "A lightweight HTML/CSS editor with live preview" \
+              --icon "${{ matrix.icon }}" \
+              --linux-app-category editors \
+              --linux-menu-group "Development;WebDevelopment;" \
+              --type ${{ matrix.pkg_type }}
+          else
+            jpackage \
+              --input lib \
+              --main-jar ${{ env.JARFILE }} \
+              --main-class com.glowingcat.Main \
+              --name LayoutLynx \
+              --app-version "${{ env.APP_VERSION }}" \
+              --vendor "Glowing Cat" \
+              --copyright "(C) 2026 Glowing Cat" \
+              --description "A lightweight HTML/CSS editor with live preview" \
+              --icon "${{ matrix.icon }}" \
+              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki \
+              --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
+              --win-menu \
+              --win-shortcut \
+              --type ${{ matrix.pkg_type }}
+          fi
+
+      - name: Sign and notarize (macOS)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          KEY_FILE=$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID}.p8
+          echo "${{ secrets.APPLE_API_KEY }}" > "$KEY_FILE"
+          IDENTITY="Developer ID Application: ${{ secrets.APPLE_SIGNING_IDENTITY }}"
+
+          # Sign all nested dylibs and executables first
+          find LayoutLynx.app -type f \( -name "*.dylib" -o -name "*.jnilib" -o -perm +111 \) | while read f; do
+            codesign --force --options runtime --timestamp --entitlements entitlements.plist --sign "$IDENTITY" --keychain $RUNNER_TEMP/build.keychain "$f"
+          done
+
+          # Sign native libraries inside the fat JAR (Apple notarization inspects JAR contents)
+          JAR_PATH=$(find LayoutLynx.app/Contents/app -name "*.jar" | head -1)
+          if [ -n "$JAR_PATH" ]; then
+            TMPJAR=$(mktemp -d)
+            cd "$TMPJAR"
+            jar xf "$OLDPWD/$JAR_PATH"
+            find . -name "*.dylib" -o -name "*.jnilib" | while read f; do
+              codesign --force --options runtime --timestamp --entitlements "$OLDPWD/entitlements.plist" --sign "$IDENTITY" --keychain $RUNNER_TEMP/build.keychain "$f"
+            done
+            jar cf "$OLDPWD/$JAR_PATH" .
+            cd "$OLDPWD"
+            rm -rf "$TMPJAR"
+          fi
+
+          # Sign the app bundle
+          codesign --force --options runtime --timestamp --entitlements entitlements.plist --sign "$IDENTITY" --keychain $RUNNER_TEMP/build.keychain LayoutLynx.app
+
+          # Verify signature
+          codesign --verify --deep --strict LayoutLynx.app
+
+          # Create DMG with Applications alias and volume icon
+          DMG_DIR=dmg_contents
+          mkdir -p "$DMG_DIR"
+          cp -R LayoutLynx.app "$DMG_DIR/"
+          ln -s /Applications "$DMG_DIR/Applications"
+          cp src/main/resources/app_icon.icns "$DMG_DIR/.VolumeIcon.icns"
+
+          hdiutil create -volname LayoutLynx -srcfolder "$DMG_DIR" -ov -format UDRW /tmp/layoutlynx-rw.dmg
+          hdiutil attach /tmp/layoutlynx-rw.dmg -mountpoint /tmp/dmg-vol
+          SetFile -a C /tmp/dmg-vol || true
+          hdiutil detach /tmp/dmg-vol
+          hdiutil convert /tmp/layoutlynx-rw.dmg -format UDZO -o LayoutLynx-${APP_VERSION}.dmg
+
+          # Sign the DMG
+          codesign --force --timestamp --sign "$IDENTITY" --keychain $RUNNER_TEMP/build.keychain LayoutLynx-${APP_VERSION}.dmg
+
+          # Notarize
+          xcrun notarytool submit LayoutLynx-${APP_VERSION}.dmg \
+            --key "$KEY_FILE" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER" \
+            --wait | tee notarize_output.txt
+
+          # Fetch log if notarization failed
+          if grep -q "Invalid" notarize_output.txt; then
+            SUBMISSION_ID=$(grep "id:" notarize_output.txt | head -1 | awk '{print $2}')
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --key "$KEY_FILE" \
+              --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER" || true
+            exit 1
+          fi
+
+          # Staple
+          xcrun stapler staple LayoutLynx-${APP_VERSION}.dmg
+
+      - name: Azure login (Windows)
+        if: runner.os == 'Windows'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign installer (Windows)
+        if: runner.os == 'Windows'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files-folder: ${{ github.workspace }}
+          files-folder-filter: msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Rename package with architecture
+        shell: bash
+        run: |
+          for f in *.dmg; do [ -f "$f" ] && mv "$f" "${f%.dmg}-${{ matrix.arch }}.dmg" || true; done
+          for f in *.msi; do [ -f "$f" ] && mv "$f" "${f%.msi}-${{ matrix.arch }}.msi" || true; done
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: LayoutLynx-${{ matrix.label }}
+          path: |
+            *.dmg
+            *.msi
+            *.deb
+            *.rpm
+
+      - name: Attach to release
+        if: inputs.version != ''
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version }}
+          name: LayoutLynx ${{ inputs.version }}
+          files: |
+            *.dmg
+            *.msi
+            *.deb
+            *.rpm
+
+  java-zip:
+    runs-on: ubuntu-22.04
+    name: Package (java-zip)
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: liberica
+          java-version: '21'
+          java-package: jdk+fx
+          cache: maven
+
+      - name: Normalize version
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "APP_VERSION=${VERSION#v}" >> $GITHUB_ENV
+
+      - name: Build app JAR (excluding JavaFX)
+        run: |
+          mvn clean package -DskipTests=true -Pexclude-javafx
+          mkdir -p staging
+          cp target/LayoutLynx-*.jar staging/LayoutLynx.jar
+
+      - name: Download JavaFX platform JARs
+        run: |
+          FX_VERSION=24
+          MODULES="javafx-base javafx-controls javafx-graphics javafx-media javafx-swing javafx-web"
+          REPO=https://repo1.maven.org/maven2/org/openjfx
+
+          # Download platform-specific JARs into separate directories
+          declare -A PLAT_MAP=(
+            [mac]="mac"
+            [mac-aarch64]="mac-aarch64"
+            [linux]="linux"
+            [linux-aarch64]="linux-aarch64"
+            [win]="win"
+            [win-aarch64]="win-aarch64"
+          )
+
+          for plat in "${!PLAT_MAP[@]}"; do
+            dir="staging/javafx/$plat"
+            mkdir -p "$dir"
+            for mod in $MODULES; do
+              # Platform-specific classifier JAR (contains native libs)
+              URL="$REPO/$mod/$FX_VERSION/$mod-$FX_VERSION-$plat.jar"
+              echo "Downloading $mod-$FX_VERSION-$plat.jar ..."
+              curl -fsSL -o "$dir/$mod-$FX_VERSION-$plat.jar" "$URL" || echo "  (not available, skipping)"
+              # Main module JAR (contains classes, same for all platforms)
+              curl -fsSL -o "$dir/$mod-$FX_VERSION.jar" "$REPO/$mod/$FX_VERSION/$mod-$FX_VERSION.jar" 2>/dev/null || true
+            done
+          done
+
+      - name: Assemble cross-platform zip
+        run: |
+          DIST=layoutlynx-${{ env.APP_VERSION }}-java
+          mkdir -p "$DIST/lib"
+          cp staging/LayoutLynx.jar "$DIST/lib/"
+          cp -r staging/javafx "$DIST/javafx"
+          cp LICENSE "$DIST/"
+          cp README.md "$DIST/"
+
+          # Create shell launcher (macOS / Linux)
+          cat > "$DIST/LayoutLynx.sh" <<'LAUNCHER_SH'
+          #!/usr/bin/env bash
+          # Launch LayoutLynx — requires Java 21+
+          # JavaFX libraries for all platforms are in the javafx/ subdirectories.
+
+          SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+          # Detect OS
+          case "$(uname -s)" in
+            Darwin*) OS="mac" ;;
+            Linux*)  OS="linux" ;;
+            *)       echo "Unsupported OS: $(uname -s)"; exit 1 ;;
+          esac
+
+          # Detect architecture
+          case "$(uname -m)" in
+            x86_64|amd64) ARCH="" ;;
+            aarch64|arm64) ARCH="-aarch64" ;;
+            *)            echo "Unsupported architecture: $(uname -m)"; exit 1 ;;
+          esac
+
+          FX_PATH="$SCRIPT_DIR/javafx/${OS}${ARCH}"
+
+          if [ ! -d "$FX_PATH" ]; then
+            echo "Error: JavaFX libraries not found for platform ${OS}${ARCH}"
+            echo "Expected directory: $FX_PATH"
+            exit 1
+          fi
+
+          exec java \
+            --enable-native-access=ALL-UNNAMED \
+            --module-path "$FX_PATH" \
+            --add-modules javafx.controls,javafx.web,javafx.swing \
+            -jar "$SCRIPT_DIR/lib/LayoutLynx.jar" "$@"
+          LAUNCHER_SH
+          chmod +x "$DIST/LayoutLynx.sh"
+
+          # Create Windows batch launcher
+          cat > "$DIST/LayoutLynx.bat" <<'LAUNCHER_BAT'
+          @echo off
+          REM Launch LayoutLynx — requires Java 21+
+          REM JavaFX libraries for all platforms are in the javafx\ subdirectories.
+
+          set "SCRIPT_DIR=%~dp0"
+
+          REM Detect architecture
+          if "%PROCESSOR_ARCHITECTURE%"=="ARM64" (
+            set "FX_PLATFORM=win-aarch64"
+          ) else (
+            set "FX_PLATFORM=win"
+          )
+
+          set "FX_PATH=%SCRIPT_DIR%javafx\%FX_PLATFORM%"
+
+          if not exist "%FX_PATH%" (
+            echo Error: JavaFX libraries not found for platform %FX_PLATFORM%
+            echo Expected directory: %FX_PATH%
+            exit /b 1
+          )
+
+          java ^
+            --enable-native-access=ALL-UNNAMED ^
+            --module-path "%FX_PATH%" ^
+            --add-modules javafx.controls,javafx.web,javafx.swing ^
+            -jar "%SCRIPT_DIR%lib\LayoutLynx.jar" %*
+          LAUNCHER_BAT
+
+          zip -r "layoutlynx-${{ env.APP_VERSION }}-java.zip" "$DIST"
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: LayoutLynx-java
+          path: "*.zip"
+
+      - name: Attach to release
+        if: inputs.version != ''
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version }}
+          name: LayoutLynx ${{ inputs.version }}
+          files: "*.zip"
