@@ -204,7 +204,8 @@ class CssCompletionProvider extends DefaultCompletionProvider {
     private String currentProperty;
 
     CssCompletionProvider() {
-        setAutoActivationRules(true, null);
+        // Don't set auto-activation rules here — we control activation via isAutoActivateOkay
+        setAutoActivationRules(false, null);
     }
 
     @Override
@@ -259,6 +260,12 @@ class CssCompletionProvider extends DefaultCompletionProvider {
 
     private List<Completion> getCompletionsImpl(String entered) {
         List<Completion> completions = new ArrayList<>();
+
+        // Require at least one alpha character to have been typed
+        if (entered.isEmpty() || !containsAlpha(entered)) {
+            return completions;
+        }
+
         String lower = entered.toLowerCase();
 
         if (inValueContext && currentProperty != null) {
@@ -266,21 +273,21 @@ class CssCompletionProvider extends DefaultCompletionProvider {
             String[] values = CSS_PROPERTIES.get(currentProperty.toLowerCase());
             if (values != null) {
                 for (String value : values) {
-                    if (lower.isEmpty() || value.toLowerCase().startsWith(lower)) {
+                    if (value.toLowerCase().startsWith(lower)) {
                         completions.add(new BasicCompletion(this, value));
                     }
                 }
             }
             // Also offer "inherit", "initial", "unset", "revert" as universal values
             for (String universal : new String[]{"inherit", "initial", "unset", "revert"}) {
-                if (lower.isEmpty() || universal.startsWith(lower)) {
+                if (universal.startsWith(lower)) {
                     completions.add(new BasicCompletion(this, universal));
                 }
             }
         } else {
             // Offer property name completions (with ": " appended)
             for (String prop : CSS_PROPERTIES.keySet()) {
-                if (lower.isEmpty() || prop.startsWith(lower)) {
+                if (prop.startsWith(lower)) {
                     BasicCompletion c = new BasicCompletion(this, prop + ": ");
                     c.setShortDescription("CSS property");
                     completions.add(c);
@@ -291,9 +298,42 @@ class CssCompletionProvider extends DefaultCompletionProvider {
         return completions;
     }
 
+    /** Returns true if the string contains at least one alphabetic character. */
+    private static boolean containsAlpha(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            if (Character.isLetter(s.charAt(i))) return true;
+        }
+        return false;
+    }
+
     @Override
     public boolean isAutoActivateOkay(JTextComponent tc) {
-        return true;
+        // Only auto-activate if we're inside a rule block and have typed alpha chars
+        String text = tc.getText();
+        int caret = tc.getCaretPosition();
+        if (caret <= 0 || caret > text.length()) return false;
+
+        // Must be inside a rule block
+        String before = text.substring(0, caret);
+        int lastOpen = before.lastIndexOf('{');
+        int lastClose = before.lastIndexOf('}');
+        if (lastOpen < 0 || lastClose > lastOpen) return false;
+
+        // Get the current token being typed
+        String insideBlock = before.substring(lastOpen + 1);
+        int lastSemicolon = insideBlock.lastIndexOf(';');
+        String currentDecl = lastSemicolon >= 0 ? insideBlock.substring(lastSemicolon + 1) : insideBlock;
+
+        int colonIdx = currentDecl.indexOf(':');
+        String typed = colonIdx >= 0 ? currentDecl.substring(colonIdx + 1).stripLeading() : currentDecl.stripLeading();
+
+        // Require at least 2 alpha characters before showing popup
+        int alphaCount = 0;
+        for (int i = 0; i < typed.length(); i++) {
+            if (Character.isLetter(typed.charAt(i))) alphaCount++;
+            if (alphaCount >= 2) return true;
+        }
+        return false;
     }
 
     /**
