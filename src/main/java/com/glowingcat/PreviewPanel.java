@@ -668,11 +668,11 @@ public class PreviewPanel extends JPanel {
                     try {
                         // Flatten into multiple <style> blocks, one per file
                         List<CssFileContent> flattened = new ArrayList<>();
-                        flattenImports(cssFile, flattened, new java.util.HashSet<>());
+                        flattenImports(cssFile, baseDir, flattened, new java.util.HashSet<>());
                         StringBuilder replacement = new StringBuilder();
                         for (CssFileContent entry : flattened) {
                             replacement.append("<style data-href=\"")
-                                .append(entry.fileName()).append("\">\n")
+                                .append(entry.relativePath()).append("\">\n")
                                 .append(entry.content()).append("\n</style>\n");
                         }
                         linkMatcher.appendReplacement(sb,
@@ -694,15 +694,15 @@ public class PreviewPanel extends JPanel {
         "@import\\s+(?:url\\(\\s*[\"']?([^\"')]+)[\"']?\\s*\\)|[\"']([^\"']+)[\"'])\\s*;?",
         java.util.regex.Pattern.CASE_INSENSITIVE);
 
-    /** Holds a CSS file's content paired with its filename for inlining. */
-    private record CssFileContent(String fileName, String content) {}
+    /** Holds a CSS file's content paired with its relative path for inlining. */
+    private record CssFileContent(String relativePath, String content) {}
 
     /**
      * Recursively reads a CSS file and flattens @import directives. Each imported file
      * becomes a separate entry in the list (imports first, then the file's own rules).
      * This preserves correct source attribution per file.
      */
-    private void flattenImports(File cssFile, List<CssFileContent> result, java.util.Set<String> visited)
+    private void flattenImports(File cssFile, File htmlBaseDir, List<CssFileContent> result, java.util.Set<String> visited)
             throws java.io.IOException {
         String canonicalPath = cssFile.getCanonicalPath();
         if (!visited.add(canonicalPath)) {
@@ -731,7 +731,7 @@ public class PreviewPanel extends JPanel {
 
             if (importedFile.isFile()) {
                 // Recursively flatten the imported file (added before this file's rules)
-                flattenImports(importedFile, result, visited);
+                flattenImports(importedFile, htmlBaseDir, result, visited);
             }
             lastEnd = importMatcher.end();
         }
@@ -741,7 +741,9 @@ public class PreviewPanel extends JPanel {
         // Also strip any remaining @import lines that we processed
         ownRules = CSS_IMPORT_PATTERN.matcher(ownRules).replaceAll("");
         if (!ownRules.trim().isEmpty()) {
-            result.add(new CssFileContent(cssFile.getName(), ownRules));
+            // Compute relative path from the HTML base directory
+            String relativePath = htmlBaseDir.toPath().relativize(cssFile.toPath()).toString();
+            result.add(new CssFileContent(relativePath, ownRules));
         }
     }
 
