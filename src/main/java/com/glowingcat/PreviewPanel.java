@@ -38,6 +38,9 @@ public class PreviewPanel extends JPanel {
     /** The currently active breakpoint width, or -1 for "auto" (fill available space). */
     private int activeBreakpoint = -1;
 
+    /** Reusable temp file for preview rendering (avoids creating many temp files). */
+    private java.io.File previewTempFile = null;
+
     /** Buttons for the breakpoint toolbar so we can update their selection state. */
     private final List<JToggleButton> breakpointButtons = new ArrayList<>();
 
@@ -439,28 +442,20 @@ public class PreviewPanel extends JPanel {
             if (webEngine == null) return;
             if (htmlFile != null) {
                 String processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
+                // Inject a <base> tag pointing to the HTML file's directory so that
+                // relative resource paths (images, fonts, etc.) resolve correctly
+                // regardless of where the temp preview file is located.
+                String baseUrl = htmlFile.getParentFile().toURI().toString();
+                String withBase = injectBaseTag(processed, baseUrl);
                 try {
-                    File tempFile = new File(htmlFile.getParentFile(), ".layoutlynx-preview.html");
-                    java.nio.file.Files.writeString(tempFile.toPath(), processed);
-                    tempFile.deleteOnExit();
-                    webEngine.load(tempFile.toURI().toString());
-                } catch (java.io.IOException e) {
-                    // Can't write to the HTML file's directory (e.g., read-only volume).
-                    // Use a temp directory and inject a <base> tag so relative paths resolve.
-                    try {
-                        File tmpDir = java.nio.file.Files.createTempDirectory("layoutlynx").toFile();
-                        tmpDir.deleteOnExit();
-                        String baseUrl = htmlFile.getParentFile().toURI().toString();
-                        String withBase = injectBaseTag(processed, baseUrl);
-                        File tmpFile = new File(tmpDir, "preview.html");
-                        java.nio.file.Files.writeString(tmpFile.toPath(), withBase);
-                        tmpFile.deleteOnExit();
-                        webEngine.load(tmpFile.toURI().toString());
-                    } catch (java.io.IOException e2) {
-                        // Last resort: loadContent with base URL via <base> tag
-                        String baseUrl = htmlFile.getParentFile().toURI().toString();
-                        webEngine.loadContent(injectBaseTag(processed, baseUrl), "text/html");
+                    if (previewTempFile == null) {
+                        previewTempFile = java.io.File.createTempFile("layoutlynx_preview", ".html");
+                        previewTempFile.deleteOnExit();
                     }
+                    java.nio.file.Files.writeString(previewTempFile.toPath(), withBase);
+                    webEngine.load(previewTempFile.toURI().toString());
+                } catch (java.io.IOException e) {
+                    webEngine.loadContent(withBase, "text/html");
                 }
             } else {
                 webEngine.loadContent(htmlContent, "text/html");

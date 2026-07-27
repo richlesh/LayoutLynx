@@ -144,6 +144,10 @@ jobs:
           if [ -d "$GITHUB_WORKSPACE/wix" ]; then
             export PATH="$GITHUB_WORKSPACE/wix:$PATH"
           fi
+
+          MODULES="javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject,jdk.unsupported"
+          JAVA_OPTS="--enable-native-access=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED"
+
           if [ "${{ runner.os }}" = "macOS" ]; then
             jpackage \
               --input lib \
@@ -155,9 +159,9 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules ALL-MODULE-PATH \
+              --add-modules $MODULES \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
-              --java-options "--enable-native-access=ALL-UNNAMED" \
+              --java-options "$JAVA_OPTS" \
               --type app-image
           elif [ "${{ runner.os }}" = "Linux" ]; then
             jpackage \
@@ -170,9 +174,9 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules ALL-MODULE-PATH \
+              --add-modules $MODULES \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
-              --java-options "--enable-native-access=ALL-UNNAMED -Dawt.useSystemAAFontSettings=on" \
+              --java-options "$JAVA_OPTS -Dawt.useSystemAAFontSettings=on" \
               --type app-image
 
             # Remove native sound libraries to eliminate libasound2 dependency
@@ -193,6 +197,20 @@ jobs:
               --linux-app-category editors \
               --linux-menu-group "Development;WebDevelopment;" \
               --type ${{ matrix.pkg_type }}
+
+            # Fix deb dependencies: jpackage ignores --linux-package-deps when
+            # using --app-image, so rewrite the control file to remove auto-detected
+            # system library deps that aren't needed (app bundles its own runtime)
+            if [ "${{ matrix.pkg_type }}" = "deb" ]; then
+              DEB_FILE=$(ls layoutlynx_*.deb 2>/dev/null || ls layoutlynx*.deb 2>/dev/null)
+              if [ -n "$DEB_FILE" ]; then
+                TMPDIR=$(mktemp -d)
+                dpkg-deb -R "$DEB_FILE" "$TMPDIR"
+                sed -i 's/^Depends:.*/Depends: xdg-utils/' "$TMPDIR/DEBIAN/control"
+                dpkg-deb -b "$TMPDIR" "$DEB_FILE"
+                rm -rf "$TMPDIR"
+              fi
+            fi
           else
             jpackage \
               --input lib \
@@ -204,9 +222,9 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules ALL-MODULE-PATH \
+              --add-modules $MODULES \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
-              --java-options "--enable-native-access=ALL-UNNAMED" \
+              --java-options "$JAVA_OPTS" \
               --win-menu \
               --win-shortcut \
               --type ${{ matrix.pkg_type }}
