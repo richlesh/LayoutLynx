@@ -444,13 +444,10 @@ public class PreviewPanel extends JPanel {
                 processed = resolveRelativePaths(htmlFile.getParentFile(), processed);
                 try {
                     // Write temp preview file to the SAME directory as the HTML file.
-                    // This is critical: JavaFX WebView enforces same-origin restrictions
-                    // on file:// URIs, so the preview file must be co-located with the
-                    // resources it references for them to load.
                     File tempFile = new File(htmlFile.getParentFile(), ".layoutlynx-preview.html");
                     java.nio.file.Files.writeString(tempFile.toPath(), processed);
                     tempFile.deleteOnExit();
-                    webEngine.load(tempFile.toURI().toString());
+                    webEngine.load(tempFile.toPath().toUri().toString());
                 } catch (java.io.IOException e) {
                     // Fallback if directory is not writable (e.g., read-only volume):
                     // load content directly — images may not display but HTML will render
@@ -468,9 +465,9 @@ public class PreviewPanel extends JPanel {
      * even when the HTML is rendered from a temp file in a different directory.
      */
     private String resolveRelativePaths(File baseDir, String html) {
-        // Match src="..." and href="..." attributes (but not data-href which we use for CSS)
+        // Match src="..." or src='...' attributes
         java.util.regex.Pattern attrPattern = java.util.regex.Pattern.compile(
-            "((?:src|poster|srcset)\\s*=\\s*\")([^\"]+)(\")",
+            "((?:src|poster)\\s*=\\s*[\"'])([^\"']+)([\"'])",
             java.util.regex.Pattern.CASE_INSENSITIVE);
 
         java.util.regex.Matcher matcher = attrPattern.matcher(html);
@@ -484,16 +481,103 @@ public class PreviewPanel extends JPanel {
                 matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(matcher.group()));
                 continue;
             }
-            // Resolve relative path to absolute file URI with normalized path
+            // Resolve relative path and embed as data URI for reliable cross-platform display
             String decodedPath = path.replace("%20", " ");
             File resolved = new File(baseDir, decodedPath);
-            // Normalize to eliminate ".." segments and get canonical absolute path
-            String absoluteUri = resolved.toPath().normalize().toUri().toString();
-            matcher.appendReplacement(sb,
-                java.util.regex.Matcher.quoteReplacement(matcher.group(1) + absoluteUri + matcher.group(3)));
+            String replacement;
+            if (resolved.isFile()) {
+                String dataUri = fileToDataUri(resolved);
+                if (dataUri != null) {
+                    replacement = matcher.group(1) + dataUri + matcher.group(3);
+                } else {
+                    // Fallback to absolute file URI if data URI fails
+                    replacement = matcher.group(1) + resolved.toPath().normalize().toUri().toString() + matcher.group(3);
+                }
+            } else {
+                // File doesn't exist — keep original path
+                replacement = matcher.group();
+            }
+            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(sb);
-        return sb.toString();
+
+        // Also resolve url() references in inline styles (background-image, etc.)
+        java.util.regex.Pattern urlPattern = java.util.regex.Pattern.compile(
+            "(url\\([\"']?)([^\"')]+)([\"']?\\))",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+
+        matcher = urlPattern.matcher(sb.toString());
+        StringBuilder sb2 = new StringBuilder();
+        while (matcher.find()) {
+            String path = matcher.group(2);
+            if (path.startsWith("http://") || path.startsWith("https://")
+                    || path.startsWith("data:") || path.startsWith("file://")
+                    || path.startsWith("#") || path.startsWith("//")) {
+                matcher.appendReplacement(sb2, java.util.regex.Matcher.quoteReplacement(matcher.group()));
+                continue;
+            }
+            String decodedPath = path.replace("%20", " ");
+            File resolved = new File(baseDir, decodedPath);
+            if (resolved.isFile()) {
+                String dataUri = fileToDataUri(resolved);
+                if (dataUri != null) {
+                    matcher.appendReplacement(sb2,
+                        java.util.regex.Matcher.quoteReplacement(matcher.group(1) + dataUri + matcher.group(3)));
+                    continue;
+                }
+            }
+            // Fallback: absolute file URI
+            if (resolved.isFile()) {
+                String absUri = resolved.toPath().normalize().toUri().toString();
+                matcher.appendReplacement(sb2,
+                    java.util.regex.Matcher.quoteReplacement(matcher.group(1) + absUri + matcher.group(3)));
+            } else {
+                matcher.appendReplacement(sb2, java.util.regex.Matcher.quoteReplacement(matcher.group()));
+            }
+        }
+        matcher.appendTail(sb2);
+
+        return sb2.toString();
+    }
+
+    /**
+     * Converts a file to a base64 data URI string.
+     * Returns null if the file can't be read or the MIME type is unknown.
+     */
+    private String fileToDataUri(File file) {
+        try {
+            byte[] data = java.nio.file.Files.readAllBytes(file.toPath());
+            String mimeType = guessMimeType(file.getName());
+            if (mimeType == null) return null;
+            String base64 = java.util.Base64.getEncoder().encodeToString(data);
+            return "data:" + mimeType + ";base64," + base64;
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Guesses the MIME type from a filename extension.
+     */
+    private String guessMimeType(String filename) {
+        String lower = filename.toLowerCase();
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".ico")) return "image/x-icon";
+        if (lower.endsWith(".bmp")) return "image/bmp";
+        if (lower.endsWith(".avif")) return "image/avif";
+        if (lower.endsWith(".mp4")) return "video/mp4";
+        if (lower.endsWith(".webm")) return "video/webm";
+        if (lower.endsWith(".ogg")) return "video/ogg";
+        if (lower.endsWith(".js")) return "application/javascript";
+        if (lower.endsWith(".woff")) return "font/woff";
+        if (lower.endsWith(".woff2")) return "font/woff2";
+        if (lower.endsWith(".ttf")) return "font/ttf";
+        if (lower.endsWith(".otf")) return "font/otf";
+        return null;
     }
 
     /**
