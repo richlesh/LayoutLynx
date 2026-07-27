@@ -234,8 +234,9 @@ public class PreviewPanel extends JPanel {
             // Set crosshair cursor on the WebView
             webView.setCursor(Cursor.CROSSHAIR);
 
-            // Click handler to show computed styles
-            webView.addEventHandler(MouseEvent.MOUSE_CLICKED, this::onPreviewClicked);
+            // Click handler to show computed styles (use event filter to capture
+            // clicks before WebView's internal handling consumes them for tables etc.)
+            webView.addEventFilter(MouseEvent.MOUSE_CLICKED, this::onPreviewClicked);
 
             // Inject no-select CSS and disable links after every page load
             webEngine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
