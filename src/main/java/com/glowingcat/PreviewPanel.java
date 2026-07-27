@@ -152,30 +152,41 @@ public class PreviewPanel extends JPanel {
         "  var selector = tag + id + cls;" +
         BUILD_SOURCE_MAP_JS +
         "  var sourceMap = buildSourceMap(el);" +
-        // Create iframe baseline for diff comparison
-        "  var iframe = document.createElement('iframe');" +
-        "  iframe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:0;height:0;border:none;visibility:hidden;';" +
-        "  document.body.appendChild(iframe);" +
-        "  var iDoc = iframe.contentDocument || iframe.contentWindow.document;" +
-        "  iDoc.open();" +
-        "  iDoc.write('<html><body><' + tag + '></' + tag + '></body></html>');" +
-        "  iDoc.close();" +
-        "  var refEl = iDoc.body.firstChild;" +
-        "  var refCs = iframe.contentWindow.getComputedStyle(refEl);" +
-        // Compare computed styles
         "  var cs = window.getComputedStyle(el);" +
         "  var props = [];" +
-        "  for (var i = 0; i < cs.length; i++) {" +
-        "    var name = cs[i];" +
-        "    var val = cs.getPropertyValue(name);" +
-        "    var refVal = refCs.getPropertyValue(name);" +
-        "    if (val !== refVal) {" +
-        "      var src = sourceMap[name] || 'inherited';" +
-        "      props.push(name + '\\t' + val + '\\t' + src);" +
+        // Try iframe-based diff comparison
+        "  try {" +
+        "    var iframe = document.createElement('iframe');" +
+        "    iframe.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:0;height:0;border:none;visibility:hidden;';" +
+        "    document.body.appendChild(iframe);" +
+        "    var iDoc = iframe.contentDocument || iframe.contentWindow.document;" +
+        "    iDoc.open();" +
+        "    iDoc.write('<html><body><' + tag + '></' + tag + '></body></html>');" +
+        "    iDoc.close();" +
+        "    var refEl = iDoc.body.firstChild;" +
+        "    var refCs = iframe.contentWindow.getComputedStyle(refEl);" +
+        "    for (var i = 0; i < cs.length; i++) {" +
+        "      var name = cs[i];" +
+        "      var val = cs.getPropertyValue(name);" +
+        "      var refVal = refCs.getPropertyValue(name);" +
+        "      if (val !== refVal) {" +
+        "        var src = sourceMap[name] || 'inherited';" +
+        "        props.push(name + '\\t' + val + '\\t' + src);" +
+        "      }" +
+        "    }" +
+        "    document.body.removeChild(iframe);" +
+        "  } catch(e) {" +
+        // Fallback: show all non-trivial computed styles without diff
+        "    props = [];" +
+        "    for (var i = 0; i < cs.length; i++) {" +
+        "      var name = cs[i];" +
+        "      var val = cs.getPropertyValue(name);" +
+        "      var src = sourceMap[name] || 'browser default';" +
+        "      if (sourceMap[name]) {" +
+        "        props.push(name + '\\t' + val + '\\t' + src);" +
+        "      }" +
         "    }" +
         "  }" +
-        // Clean up
-        "  document.body.removeChild(iframe);" +
         "  return selector + '\\n' + props.join('\\n');" +
         "})(%d, %d)";
 
