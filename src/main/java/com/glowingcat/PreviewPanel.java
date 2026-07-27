@@ -440,17 +440,33 @@ public class PreviewPanel extends JPanel {
         String processed;
         if (htmlFile != null) {
             processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
-            processed = embedImages(htmlFile.getParentFile(), processed);
+            try {
+                processed = embedImages(htmlFile.getParentFile(), processed);
+            } catch (Exception e) {
+                System.err.println("LayoutLynx: embedImages failed: " + e.getMessage());
+            }
         } else {
             processed = htmlContent;
         }
         final String finalHtml = processed;
+        final File finalHtmlFile = htmlFile;
 
         Platform.runLater(() -> {
             if (webEngine == null) return;
-            // Use loadContent directly — data URIs are self-contained so no
-            // external file access is needed by WebView.
-            webEngine.loadContent(finalHtml, "text/html");
+            if (finalHtmlFile != null) {
+                try {
+                    // Write to temp file — loadContent has size limits that can
+                    // truncate large HTML with many base64-embedded images
+                    File tempFile = new File(finalHtmlFile.getParentFile(), ".layoutlynx-preview.html");
+                    java.nio.file.Files.writeString(tempFile.toPath(), finalHtml);
+                    tempFile.deleteOnExit();
+                    webEngine.load(tempFile.toURI().toString());
+                } catch (java.io.IOException e) {
+                    webEngine.loadContent(finalHtml, "text/html");
+                }
+            } else {
+                webEngine.loadContent(finalHtml, "text/html");
+            }
         });
     }
 
