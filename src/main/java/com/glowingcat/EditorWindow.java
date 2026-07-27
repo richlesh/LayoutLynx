@@ -766,6 +766,7 @@ public class EditorWindow {
         // Add color swatch gutter and specificity tooltip only for CSS files
         if (SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntaxStyle)) {
             CssSpecificityTooltip.install(textArea);
+            CssCompletionProvider.install(textArea);
             ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
             swatchPanel.setEditorScrollPane(scrollPane);
             JPanel editorWithSwatches = new JPanel(new BorderLayout());
@@ -831,6 +832,7 @@ public class EditorWindow {
         // Add color swatch gutter and specificity tooltip only for CSS files
         if (SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntaxStyle)) {
             CssSpecificityTooltip.install(textArea);
+            CssCompletionProvider.install(textArea);
             ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
             swatchPanel.setEditorScrollPane(scrollPane);
             JPanel editorWithSwatches = new JPanel(new BorderLayout());

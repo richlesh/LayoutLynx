@@ -8,6 +8,7 @@ import javafx.embed.swing.JFXPanel;
 import javafx.scene.Cursor;
 import javafx.scene.Scene;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.StackPane;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import netscape.javascript.JSObject;
@@ -33,6 +34,12 @@ public class PreviewPanel extends JPanel {
     private final JFXPanel fxPanel;
     private WebView webView;
     private WebEngine webEngine;
+
+    /** The currently active breakpoint width, or -1 for "auto" (fill available space). */
+    private int activeBreakpoint = -1;
+
+    /** Buttons for the breakpoint toolbar so we can update their selection state. */
+    private final List<JToggleButton> breakpointButtons = new ArrayList<>();
 
     /** Remembered column widths for the computed styles table. */
     private int[] savedColumnWidths = {180, 200, 220};
@@ -176,6 +183,47 @@ public class PreviewPanel extends JPanel {
         setLayout(new BorderLayout());
         setMinimumSize(new Dimension(200, 100));
 
+        // --- Responsive breakpoint toolbar ---
+        JPanel breakpointBar = new JPanel(new FlowLayout(FlowLayout.CENTER, 2, 2));
+        breakpointBar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Color.LIGHT_GRAY));
+
+        JLabel label = new JLabel("Responsive:");
+        label.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+        breakpointBar.add(label);
+
+        int[] widths = {320, 768, 1024, 1440};
+        String[] labels = {"320", "768", "1024", "1440"};
+        String[] tooltips = {"Mobile (320px)", "Tablet (768px)", "Desktop (1024px)", "Wide (1440px)"};
+
+        ButtonGroup breakpointGroup = new ButtonGroup();
+
+        // "Auto" button — fill available space
+        JToggleButton autoBtn = new JToggleButton("Auto", true);
+        autoBtn.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+        autoBtn.setMargin(new Insets(2, 6, 2, 6));
+        autoBtn.setToolTipText("Fill available width");
+        autoBtn.setFocusPainted(false);
+        autoBtn.addActionListener(e -> setBreakpoint(-1));
+        breakpointGroup.add(autoBtn);
+        breakpointBar.add(autoBtn);
+        breakpointButtons.add(autoBtn);
+
+        for (int i = 0; i < widths.length; i++) {
+            int width = widths[i];
+            JToggleButton btn = new JToggleButton(labels[i]);
+            btn.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
+            btn.setMargin(new Insets(2, 6, 2, 6));
+            btn.setToolTipText(tooltips[i]);
+            btn.setFocusPainted(false);
+            btn.addActionListener(e -> setBreakpoint(width));
+            breakpointGroup.add(btn);
+            breakpointBar.add(btn);
+            breakpointButtons.add(btn);
+        }
+
+        add(breakpointBar, BorderLayout.NORTH);
+
+        // --- WebView panel ---
         fxPanel = new JFXPanel();
         add(fxPanel, BorderLayout.CENTER);
 
@@ -196,8 +244,29 @@ public class PreviewPanel extends JPanel {
                 }
             });
 
-            Scene scene = new Scene(webView);
+            Scene scene = new Scene(new StackPane(webView));
             fxPanel.setScene(scene);
+        });
+    }
+
+    /**
+     * Sets the preview viewport to a fixed width (simulating a responsive breakpoint),
+     * or -1 to fill all available space.
+     */
+    private void setBreakpoint(int width) {
+        activeBreakpoint = width;
+        Platform.runLater(() -> {
+            if (webView == null) return;
+            if (width <= 0) {
+                // Auto: let WebView fill its parent
+                webView.setMaxWidth(Double.MAX_VALUE);
+                webView.setMinWidth(0);
+                webView.setPrefWidth(-1);
+            } else {
+                webView.setMinWidth(width);
+                webView.setPrefWidth(width);
+                webView.setMaxWidth(width);
+            }
         });
     }
 
