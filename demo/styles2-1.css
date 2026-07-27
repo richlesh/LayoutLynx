@@ -12,8 +12,7 @@
 }
 
 /* Table first column emphasis */
-tbody td:first-child {
-    font-weight: 600;
+tbody td:first-child {    font-weight: 600;
     color: #6666ff;
 }
 

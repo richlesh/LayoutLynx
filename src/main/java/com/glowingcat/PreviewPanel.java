@@ -445,12 +445,47 @@ public class PreviewPanel extends JPanel {
                     tempFile.deleteOnExit();
                     webEngine.load(tempFile.toURI().toString());
                 } catch (java.io.IOException e) {
-                    webEngine.loadContent(processed, "text/html");
+                    // Can't write to the HTML file's directory (e.g., read-only volume).
+                    // Use a temp directory and inject a <base> tag so relative paths resolve.
+                    try {
+                        File tmpDir = java.nio.file.Files.createTempDirectory("layoutlynx").toFile();
+                        tmpDir.deleteOnExit();
+                        String baseUrl = htmlFile.getParentFile().toURI().toString();
+                        String withBase = injectBaseTag(processed, baseUrl);
+                        File tmpFile = new File(tmpDir, "preview.html");
+                        java.nio.file.Files.writeString(tmpFile.toPath(), withBase);
+                        tmpFile.deleteOnExit();
+                        webEngine.load(tmpFile.toURI().toString());
+                    } catch (java.io.IOException e2) {
+                        // Last resort: loadContent with base URL via <base> tag
+                        String baseUrl = htmlFile.getParentFile().toURI().toString();
+                        webEngine.loadContent(injectBaseTag(processed, baseUrl), "text/html");
+                    }
                 }
             } else {
                 webEngine.loadContent(htmlContent, "text/html");
             }
         });
+    }
+
+    /**
+     * Injects a &lt;base href="..."&gt; tag into the HTML so that relative resource
+     * paths (images, etc.) resolve correctly even when the file is loaded from a
+     * different location.
+     */
+    private String injectBaseTag(String html, String baseUrl) {
+        // Insert <base> as the first child of <head>, or before the first tag if no <head>
+        String baseTag = "<base href=\"" + baseUrl + "\">";
+        String lowerHtml = html.toLowerCase();
+        int headIdx = lowerHtml.indexOf("<head");
+        if (headIdx >= 0) {
+            int headClose = html.indexOf('>', headIdx);
+            if (headClose >= 0) {
+                return html.substring(0, headClose + 1) + "\n" + baseTag + "\n" + html.substring(headClose + 1);
+            }
+        }
+        // No <head> found — prepend <base> before the content
+        return baseTag + "\n" + html;
     }
 
     /**

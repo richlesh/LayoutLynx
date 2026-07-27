@@ -155,7 +155,7 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject \
+              --add-modules ALL-MODULE-PATH \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
               --java-options "--enable-native-access=ALL-UNNAMED" \
               --type app-image
@@ -170,7 +170,7 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject \
+              --add-modules ALL-MODULE-PATH \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
               --java-options "--enable-native-access=ALL-UNNAMED -Dawt.useSystemAAFontSettings=on" \
               --type app-image
@@ -204,7 +204,7 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject \
+              --add-modules ALL-MODULE-PATH \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
               --java-options "--enable-native-access=ALL-UNNAMED" \
               --win-menu \
