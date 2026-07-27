@@ -92,6 +92,22 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
+      - name: Generate License.java
+        shell: bash
+        env:
+          LICENSE_SALT: ${{ secrets.LICENSE_SALT }}
+        run: |
+          cat > src/main/java/com/glowingcat/License.java <<EOF
+          /*
+           * (c) 2026 Glowing Cat Software
+           */
+          package com.glowingcat;
+
+          class License {
+              static final String LICENSE_SALT = "${LICENSE_SALT}";
+          }
+          EOF
+
       - name: Build fat JAR
         shell: bash
         run: |
@@ -330,6 +346,22 @@ jobs:
         run: |
           VERSION="${{ inputs.version }}"
           echo "APP_VERSION=${VERSION#v}" >> $GITHUB_ENV
+
+      - name: Generate License.java
+        shell: bash
+        env:
+          LICENSE_SALT: ${{ secrets.LICENSE_SALT }}
+        run: |
+          cat > src/main/java/com/glowingcat/License.java <<EOF
+          /*
+           * (c) 2026 Glowing Cat Software
+           */
+          package com.glowingcat;
+
+          class License {
+              static final String LICENSE_SALT = "${LICENSE_SALT}";
+          }
+          EOF
 
       - name: Build app JAR (excluding JavaFX)
         run: |
