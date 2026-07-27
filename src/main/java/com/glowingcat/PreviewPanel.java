@@ -439,11 +439,9 @@ public class PreviewPanel extends JPanel {
             if (webEngine == null) return;
             if (htmlFile != null) {
                 String processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
-                // Resolve relative image paths to absolute file:// URIs
-                // (same approach as PurplePlatypus which works in jpackage builds)
-                processed = resolveRelativeImagePaths(htmlFile.getParentFile(), processed);
+                // Embed images as base64 data URIs for reliable display in jpackage builds
+                processed = embedImages(htmlFile.getParentFile(), processed);
                 try {
-                    // Write temp preview file to the same directory as the HTML file
                     File tempFile = new File(htmlFile.getParentFile(), ".layoutlynx-preview.html");
                     java.nio.file.Files.writeString(tempFile.toPath(), processed);
                     tempFile.deleteOnExit();
@@ -458,12 +456,12 @@ public class PreviewPanel extends JPanel {
     }
 
     /**
-     * Resolves relative paths in img src attributes to absolute file:// URIs.
-     * Matches PurplePlatypus's proven approach for jpackage compatibility.
+     * Finds img tags with relative src paths and embeds the image data as base64
+     * data URIs. This bypasses file:// loading issues in jpackaged WebView.
      */
-    private String resolveRelativeImagePaths(File baseDir, String html) {
+    private String embedImages(File baseDir, String html) {
         java.util.regex.Pattern imgPattern = java.util.regex.Pattern.compile(
-            "(<img[^>]+src=\")([^\"]+)(\"[^>]*>)",
+            "(<img\\b[^>]*\\bsrc\\s*=\\s*\")([^\"]+)(\"[^>]*>)",
             java.util.regex.Pattern.CASE_INSENSITIVE);
         java.util.regex.Matcher matcher = imgPattern.matcher(html);
         StringBuilder sb = new StringBuilder();
@@ -471,15 +469,75 @@ public class PreviewPanel extends JPanel {
             String src = matcher.group(2);
             if (!src.startsWith("http://") && !src.startsWith("https://")
                     && !src.startsWith("data:") && !src.startsWith("file://")) {
-                String decodedSrc = src.replace("%20", " ");
-                File imgFile = new File(baseDir, decodedSrc);
-                src = imgFile.toURI().toString();
+                String decoded = src.replace("%20", " ");
+                File imgFile = new File(baseDir, decoded);
+                if (imgFile.isFile()) {
+                    String dataUri = toDataUri(imgFile);
+                    if (dataUri != null) {
+                        src = dataUri;
+                    }
+                }
             }
             matcher.appendReplacement(sb,
                 java.util.regex.Matcher.quoteReplacement(matcher.group(1) + src + matcher.group(3)));
         }
         matcher.appendTail(sb);
-        return sb.toString();
+
+        // Also handle single-quoted src: src='...'
+        java.util.regex.Pattern imgPatternSQ = java.util.regex.Pattern.compile(
+            "(<img\\b[^>]*\\bsrc\\s*=\\s*')([^']+)('[^>]*>)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+        matcher = imgPatternSQ.matcher(sb.toString());
+        StringBuilder sb2 = new StringBuilder();
+        while (matcher.find()) {
+            String src = matcher.group(2);
+            if (!src.startsWith("http://") && !src.startsWith("https://")
+                    && !src.startsWith("data:") && !src.startsWith("file://")) {
+                String decoded = src.replace("%20", " ");
+                File imgFile = new File(baseDir, decoded);
+                if (imgFile.isFile()) {
+                    String dataUri = toDataUri(imgFile);
+                    if (dataUri != null) {
+                        src = dataUri;
+                    }
+                }
+            }
+            matcher.appendReplacement(sb2,
+                java.util.regex.Matcher.quoteReplacement(matcher.group(1) + src + matcher.group(3)));
+        }
+        matcher.appendTail(sb2);
+
+        return sb2.toString();
+    }
+
+    /**
+     * Reads a file and returns a base64 data URI, or null if unsupported type.
+     */
+    private String toDataUri(File file) {
+        String mime = mimeForFile(file.getName());
+        if (mime == null) return null;
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            return "data:" + mime + ";base64," + java.util.Base64.getEncoder().encodeToString(bytes);
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns MIME type for common image extensions, or null.
+     */
+    private String mimeForFile(String name) {
+        String n = name.toLowerCase();
+        if (n.endsWith(".png")) return "image/png";
+        if (n.endsWith(".jpg") || n.endsWith(".jpeg")) return "image/jpeg";
+        if (n.endsWith(".gif")) return "image/gif";
+        if (n.endsWith(".svg")) return "image/svg+xml";
+        if (n.endsWith(".webp")) return "image/webp";
+        if (n.endsWith(".ico")) return "image/x-icon";
+        if (n.endsWith(".bmp")) return "image/bmp";
+        if (n.endsWith(".avif")) return "image/avif";
+        return null;
     }
     private String resolveRelativePaths(File baseDir, String html) {
         // Process src="..." and src='...' attributes — embed images as data URIs
