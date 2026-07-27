@@ -904,21 +904,25 @@ public class EditorWindow {
             String text = textArea.getText();
             String searchPattern = selector.trim();
 
-            // Build a regex that matches the selector with flexible whitespace.
-            // After formatting, "html, body" may become "html,\nbody" or "html ,\n  body".
-            // Replace each run of whitespace in the selector with \s+ and allow optional
-            // whitespace around commas.
-            String flexPattern = buildFlexibleSelectorPattern(searchPattern);
-            java.util.regex.Pattern selectorRegex;
-            try {
-                selectorRegex = java.util.regex.Pattern.compile(flexPattern);
-            } catch (java.util.regex.PatternSyntaxException e) {
-                // Fall back to literal search if pattern is invalid
-                selectorRegex = null;
-            }
-
             int index = -1;
             int matchLength = searchPattern.length();
+
+            // WebKit normalizes selectors (e.g., "*::before" -> "::before",
+            // "*, *::before" -> "*, ::before"). Build alternate patterns to
+            // match the original source which may differ from what WebKit reports.
+            List<String> searchVariants = new ArrayList<>();
+            searchVariants.add(searchPattern);
+            // Try with * re-inserted before pseudo-elements
+            String withStar = searchPattern.replaceAll("(?<=,\\s*)(::)", "*$1")
+                .replaceAll("^(::)", "*$1");
+            if (!withStar.equals(searchPattern)) {
+                searchVariants.add(withStar);
+            }
+            // Try with * removed from before pseudo-elements (opposite direction)
+            String withoutStar = searchPattern.replaceAll("\\*(::|:)", "$1");
+            if (!withoutStar.equals(searchPattern)) {
+                searchVariants.add(withoutStar);
+            }
 
             // For HTML files, constrain search to within <style> blocks
             boolean isHtml = targetFile.getName().toLowerCase().matches(".*\\.html?$");
@@ -927,6 +931,7 @@ public class EditorWindow {
                 // Find the selector only within <style>...</style> regions
                 String lower = text.toLowerCase();
                 int styleStart = 0;
+                outer:
                 while (styleStart < lower.length()) {
                     int openTag = lower.indexOf("<style", styleStart);
                     if (openTag < 0) break;
@@ -937,20 +942,33 @@ public class EditorWindow {
 
                     // Search within this <style> block
                     String block = text.substring(openEnd + 1, closeTag);
-                    int found = findSelectorInBlock(block, searchPattern, selectorRegex);
-                    if (found >= 0) {
-                        index = openEnd + 1 + found;
-                        matchLength = calcMatchLength(block, found, searchPattern, selectorRegex);
-                        break;
+                    for (String variant : searchVariants) {
+                        java.util.regex.Pattern variantRegex = null;
+                        try {
+                            variantRegex = java.util.regex.Pattern.compile(buildFlexibleSelectorPattern(variant));
+                        } catch (java.util.regex.PatternSyntaxException e) { /* ignore */ }
+                        int found = findSelectorInBlock(block, variant, variantRegex);
+                        if (found >= 0) {
+                            index = openEnd + 1 + found;
+                            matchLength = calcMatchLength(block, found, variant, variantRegex);
+                            break outer;
+                        }
                     }
                     styleStart = closeTag + 8;
                 }
             } else {
                 // For CSS files, search the entire file
-                int found = findSelectorInBlock(text, searchPattern, selectorRegex);
-                if (found >= 0) {
-                    index = found;
-                    matchLength = calcMatchLength(text, found, searchPattern, selectorRegex);
+                for (String variant : searchVariants) {
+                    java.util.regex.Pattern variantRegex = null;
+                    try {
+                        variantRegex = java.util.regex.Pattern.compile(buildFlexibleSelectorPattern(variant));
+                    } catch (java.util.regex.PatternSyntaxException e) { /* ignore */ }
+                    int found = findSelectorInBlock(text, variant, variantRegex);
+                    if (found >= 0) {
+                        index = found;
+                        matchLength = calcMatchLength(text, found, variant, variantRegex);
+                        break;
+                    }
                 }
             }
 
