@@ -461,12 +461,15 @@ public class PreviewPanel extends JPanel {
 
     /**
      * Finds img tags with relative src paths and embeds the image data as base64
-     * data URIs. Only processes &lt;img src&gt; — skips srcset/source elements since
-     * WebView will fall back to the img src when source elements can't load.
+     * data URIs. Only processes &lt;img src&gt; — strips &lt;source&gt; elements from
+     * &lt;picture&gt; blocks so WebView is forced to use the embedded img fallback.
      */
     private String embedImages(File baseDir, String html) {
-        // Only process src="..." attributes — this handles <img src="..."> fallbacks.
-        // WebView will use <img src> when <source srcset> images aren't loadable.
+        // Strip <source> elements from <picture> blocks — WebView selects a source
+        // based on media queries but can't load relative srcset paths from loadContent.
+        // Removing them forces fallback to <img src> which we embed as base64.
+        html = html.replaceAll("<source\\b[^>]*>", "");
+        // Embed src="..." attributes as base64 data URIs
         html = embedAttribute(baseDir, html, "src");
         return html;
     }
