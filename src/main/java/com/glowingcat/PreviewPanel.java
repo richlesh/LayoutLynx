@@ -119,7 +119,7 @@ public class PreviewPanel extends JPanel {
     private static final String FULL_COMPUTED_STYLES_JS =
         "(function(x, y) {" +
         "  var el = document.elementFromPoint(x, y);" +
-        "  if (!el) return '';" +
+        "  if (!el || el.nodeType !== 1) return '';" +
         "  var tag = el.tagName.toLowerCase();" +
         "  var id = el.id ? '#' + el.id : '';" +
         "  var cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().replace(/\\s+/g, '.') : '';" +
@@ -145,7 +145,7 @@ public class PreviewPanel extends JPanel {
     private static final String DIFF_COMPUTED_STYLES_JS =
         "(function(x, y) {" +
         "  var el = document.elementFromPoint(x, y);" +
-        "  if (!el) return '';" +
+        "  if (!el || el.nodeType !== 1) return '';" +
         "  var tag = el.tagName.toLowerCase();" +
         "  var id = el.id ? '#' + el.id : '';" +
         "  var cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().replace(/\\s+/g, '.') : '';" +
@@ -298,7 +298,12 @@ public class PreviewPanel extends JPanel {
 
         String jsTemplate = showAll ? FULL_COMPUTED_STYLES_JS : DIFF_COMPUTED_STYLES_JS;
         String js = String.format(jsTemplate, (int) x, (int) y);
-        Object result = webEngine.executeScript(js);
+        Object result;
+        try {
+            result = webEngine.executeScript(js);
+        } catch (Exception e) {
+            return; // Click on non-element area (text node, etc.)
+        }
         if (result == null || result.toString().isEmpty()) return;
 
         String text = result.toString();
