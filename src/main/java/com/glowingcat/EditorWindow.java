@@ -903,12 +903,25 @@ public class EditorWindow {
             RSyntaxTextArea textArea = tab.textArea;
             String text = textArea.getText();
             String searchPattern = selector.trim();
+
+            // Build a regex that matches the selector with flexible whitespace.
+            // After formatting, "html, body" may become "html,\nbody" or "html ,\n  body".
+            // Replace each run of whitespace in the selector with \s+ and allow optional
+            // whitespace around commas.
+            String flexPattern = buildFlexibleSelectorPattern(searchPattern);
+            java.util.regex.Pattern selectorRegex;
+            try {
+                selectorRegex = java.util.regex.Pattern.compile(flexPattern);
+            } catch (java.util.regex.PatternSyntaxException e) {
+                // Fall back to literal search if pattern is invalid
+                selectorRegex = null;
+            }
+
             int index = -1;
+            int matchLength = searchPattern.length();
 
             // For HTML files, constrain search to within <style> blocks
             boolean isHtml = targetFile.getName().toLowerCase().matches(".*\\.html?$");
-            int searchStart = 0;
-            int searchEnd = text.length();
 
             if (isHtml) {
                 // Find the selector only within <style>...</style> regions
@@ -923,53 +936,109 @@ public class EditorWindow {
                     if (closeTag < 0) closeTag = text.length();
 
                     // Search within this <style> block
-                    int pos = openEnd + 1;
-                    while (pos < closeTag) {
-                        int found = text.indexOf(searchPattern, pos);
-                        if (found < 0 || found >= closeTag) break;
-                        int end = found + searchPattern.length();
-                        String after = text.substring(end, closeTag).stripLeading();
-                        if (after.startsWith("{") || after.startsWith(",")) {
-                            index = found;
-                            break;
-                        }
-                        pos = found + 1;
+                    String block = text.substring(openEnd + 1, closeTag);
+                    int found = findSelectorInBlock(block, searchPattern, selectorRegex);
+                    if (found >= 0) {
+                        index = openEnd + 1 + found;
+                        matchLength = calcMatchLength(block, found, searchPattern, selectorRegex);
+                        break;
                     }
-                    if (index >= 0) break;
                     styleStart = closeTag + 8;
                 }
             } else {
                 // For CSS files, search the entire file
-                int pos = 0;
-                while (pos < text.length()) {
-                    int found = text.indexOf(searchPattern, pos);
-                    if (found < 0) break;
-                    int end = found + searchPattern.length();
-                    if (end <= text.length()) {
-                        String after = text.substring(end).stripLeading();
-                        if (after.startsWith("{") || after.startsWith(",")) {
-                            index = found;
-                            break;
-                        }
-                    }
-                    pos = found + 1;
-                }
-
-                // Fallback: simple text search
-                if (index < 0) {
-                    index = text.indexOf(searchPattern);
+                int found = findSelectorInBlock(text, searchPattern, selectorRegex);
+                if (found >= 0) {
+                    index = found;
+                    matchLength = calcMatchLength(text, found, searchPattern, selectorRegex);
                 }
             }
 
             if (index >= 0) {
                 textArea.setCaretPosition(index);
-                textArea.select(index, index + searchPattern.length());
+                textArea.select(index, index + matchLength);
                 // Ensure the text area has focus so the selection renders in active color
                 frame.toFront();
                 frame.requestFocus();
                 textArea.requestFocusInWindow();
             }
         });
+    }
+
+    /**
+     * Builds a regex pattern that matches a CSS selector with flexible whitespace.
+     * Allows newlines and varying whitespace between selector parts, especially
+     * around commas (e.g., "html, body" matches "html,\n  body").
+     */
+    private String buildFlexibleSelectorPattern(String selector) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < selector.length(); i++) {
+            char c = selector.charAt(i);
+            if (c == ',') {
+                // Allow optional whitespace around commas (including newlines)
+                sb.append("\\s*,\\s*");
+            } else if (Character.isWhitespace(c)) {
+                // Collapse whitespace runs into \s+
+                while (i + 1 < selector.length() && Character.isWhitespace(selector.charAt(i + 1))) {
+                    i++;
+                }
+                sb.append("\\s+");
+            } else if ("[](){}.*+?^$|\\".indexOf(c) >= 0) {
+                // Escape regex special characters
+                sb.append('\\').append(c);
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Finds a selector in a text block using flexible regex matching,
+     * falling back to literal search. Returns the offset within the block, or -1.
+     */
+    private int findSelectorInBlock(String block, String literal, java.util.regex.Pattern flexPattern) {
+        // Try flexible regex first
+        if (flexPattern != null) {
+            java.util.regex.Matcher m = flexPattern.matcher(block);
+            while (m.find()) {
+                int end = m.end();
+                String after = block.substring(end).stripLeading();
+                if (after.startsWith("{") || after.startsWith(",")) {
+                    return m.start();
+                }
+            }
+        }
+
+        // Fall back to literal search
+        int pos = 0;
+        while (pos < block.length()) {
+            int found = block.indexOf(literal, pos);
+            if (found < 0) break;
+            int end = found + literal.length();
+            if (end <= block.length()) {
+                String after = block.substring(end).stripLeading();
+                if (after.startsWith("{") || after.startsWith(",")) {
+                    return found;
+                }
+            }
+            pos = found + 1;
+        }
+        return -1;
+    }
+
+    /**
+     * Calculates the actual match length at the given position (may differ from
+     * the literal selector length if matched via flexible whitespace regex).
+     */
+    private int calcMatchLength(String block, int start, String literal, java.util.regex.Pattern flexPattern) {
+        if (flexPattern != null) {
+            java.util.regex.Matcher m = flexPattern.matcher(block);
+            if (m.find(start) && m.start() == start) {
+                return m.end() - m.start();
+            }
+        }
+        return literal.length();
     }
 
     private void onTabContentChanged(TabInfo tab) {
