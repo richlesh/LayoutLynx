@@ -453,20 +453,9 @@ public class PreviewPanel extends JPanel {
 
         Platform.runLater(() -> {
             if (webEngine == null) return;
-            if (finalHtmlFile != null) {
-                try {
-                    // Write to temp file — loadContent has size limits that can
-                    // truncate large HTML with many base64-embedded images
-                    File tempFile = new File(finalHtmlFile.getParentFile(), ".layoutlynx-preview.html");
-                    java.nio.file.Files.writeString(tempFile.toPath(), finalHtml);
-                    tempFile.deleteOnExit();
-                    webEngine.load(tempFile.toURI().toString());
-                } catch (java.io.IOException e) {
-                    webEngine.loadContent(finalHtml, "text/html");
-                }
-            } else {
-                webEngine.loadContent(finalHtml, "text/html");
-            }
+            // Use loadContent — data URIs work when HTML is loaded directly
+            // but WebKit restricts data URI size when loaded from file:// pages
+            webEngine.loadContent(finalHtml, "text/html");
         });
     }
 
