@@ -140,6 +140,10 @@ jobs:
       - name: Run jpackage
         shell: bash
         run: |
+          # Ensure WiX is on PATH for Windows builds
+          if [ -d "$GITHUB_WORKSPACE/wix" ]; then
+            export PATH="$GITHUB_WORKSPACE/wix:$PATH"
+          fi
           if [ "${{ runner.os }}" = "macOS" ]; then
             jpackage \
               --input lib \
