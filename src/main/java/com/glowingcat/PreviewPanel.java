@@ -484,10 +484,11 @@ public class PreviewPanel extends JPanel {
                 matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(matcher.group()));
                 continue;
             }
-            // Resolve relative path to absolute file URI
+            // Resolve relative path to absolute file URI with normalized path
             String decodedPath = path.replace("%20", " ");
             File resolved = new File(baseDir, decodedPath);
-            String absoluteUri = resolved.toURI().toString();
+            // Normalize to eliminate ".." segments and get canonical absolute path
+            String absoluteUri = resolved.toPath().normalize().toUri().toString();
             matcher.appendReplacement(sb,
                 java.util.regex.Matcher.quoteReplacement(matcher.group(1) + absoluteUri + matcher.group(3)));
         }
