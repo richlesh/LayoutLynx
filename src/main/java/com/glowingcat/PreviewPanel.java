@@ -38,9 +38,6 @@ public class PreviewPanel extends JPanel {
     /** The currently active breakpoint width, or -1 for "auto" (fill available space). */
     private int activeBreakpoint = -1;
 
-    /** Reusable temp file for preview rendering (avoids creating many temp files). */
-    private java.io.File previewTempFile = null;
-
     /** Buttons for the breakpoint toolbar so we can update their selection state. */
     private final List<JToggleButton> breakpointButtons = new ArrayList<>();
 
@@ -443,17 +440,20 @@ public class PreviewPanel extends JPanel {
             if (htmlFile != null) {
                 String processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
                 // Resolve relative resource paths (images, scripts, etc.) to absolute
-                // file:// URIs. JavaFX WebView doesn't reliably support <base href> for
-                // file:// resources when the page is loaded from a temp file.
+                // file:// URIs so they load correctly regardless of temp file location.
                 processed = resolveRelativePaths(htmlFile.getParentFile(), processed);
                 try {
-                    if (previewTempFile == null) {
-                        previewTempFile = java.io.File.createTempFile("layoutlynx_preview", ".html");
-                        previewTempFile.deleteOnExit();
-                    }
-                    java.nio.file.Files.writeString(previewTempFile.toPath(), processed);
-                    webEngine.load(previewTempFile.toURI().toString());
+                    // Write temp preview file to the SAME directory as the HTML file.
+                    // This is critical: JavaFX WebView enforces same-origin restrictions
+                    // on file:// URIs, so the preview file must be co-located with the
+                    // resources it references for them to load.
+                    File tempFile = new File(htmlFile.getParentFile(), ".layoutlynx-preview.html");
+                    java.nio.file.Files.writeString(tempFile.toPath(), processed);
+                    tempFile.deleteOnExit();
+                    webEngine.load(tempFile.toURI().toString());
                 } catch (java.io.IOException e) {
+                    // Fallback if directory is not writable (e.g., read-only volume):
+                    // load content directly — images may not display but HTML will render
                     webEngine.loadContent(processed, "text/html");
                 }
             } else {
