@@ -439,18 +439,16 @@ public class PreviewPanel extends JPanel {
             if (webEngine == null) return;
             if (htmlFile != null) {
                 String processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
-                // Resolve relative resource paths (images, scripts, etc.) to absolute
-                // file:// URIs so they load correctly regardless of temp file location.
-                processed = resolveRelativePaths(htmlFile.getParentFile(), processed);
+                // Resolve relative image paths to absolute file:// URIs
+                // (same approach as PurplePlatypus which works in jpackage builds)
+                processed = resolveRelativeImagePaths(htmlFile.getParentFile(), processed);
                 try {
-                    // Write temp preview file to the SAME directory as the HTML file.
+                    // Write temp preview file to the same directory as the HTML file
                     File tempFile = new File(htmlFile.getParentFile(), ".layoutlynx-preview.html");
                     java.nio.file.Files.writeString(tempFile.toPath(), processed);
                     tempFile.deleteOnExit();
-                    webEngine.load(tempFile.toPath().toUri().toString());
+                    webEngine.load(tempFile.toURI().toString());
                 } catch (java.io.IOException e) {
-                    // Fallback if directory is not writable (e.g., read-only volume):
-                    // load content directly — images may not display but HTML will render
                     webEngine.loadContent(processed, "text/html");
                 }
             } else {
@@ -460,10 +458,29 @@ public class PreviewPanel extends JPanel {
     }
 
     /**
-     * Resolves relative paths in src and href attributes to absolute file:// URIs.
-     * This ensures images, scripts, and other resources load correctly in the preview
-     * even when the HTML is rendered from a temp file in a different directory.
+     * Resolves relative paths in img src attributes to absolute file:// URIs.
+     * Matches PurplePlatypus's proven approach for jpackage compatibility.
      */
+    private String resolveRelativeImagePaths(File baseDir, String html) {
+        java.util.regex.Pattern imgPattern = java.util.regex.Pattern.compile(
+            "(<img[^>]+src=\")([^\"]+)(\"[^>]*>)",
+            java.util.regex.Pattern.CASE_INSENSITIVE);
+        java.util.regex.Matcher matcher = imgPattern.matcher(html);
+        StringBuilder sb = new StringBuilder();
+        while (matcher.find()) {
+            String src = matcher.group(2);
+            if (!src.startsWith("http://") && !src.startsWith("https://")
+                    && !src.startsWith("data:") && !src.startsWith("file://")) {
+                String decodedSrc = src.replace("%20", " ");
+                File imgFile = new File(baseDir, decodedSrc);
+                src = imgFile.toURI().toString();
+            }
+            matcher.appendReplacement(sb,
+                java.util.regex.Matcher.quoteReplacement(matcher.group(1) + src + matcher.group(3)));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
     private String resolveRelativePaths(File baseDir, String html) {
         // Process src="..." and src='...' attributes — embed images as data URIs
         html = resolveAttributes(baseDir, html, "src");
