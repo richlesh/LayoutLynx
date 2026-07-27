@@ -435,23 +435,22 @@ public class PreviewPanel extends JPanel {
      * are accessible via document.styleSheets.cssRules without cross-origin issues.
      */
     public void updateContent(File htmlFile, String htmlContent) {
+        // Perform all file I/O (CSS inlining, image embedding) on the calling thread
+        // BEFORE dispatching to the JavaFX thread.
+        String processed;
+        if (htmlFile != null) {
+            processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
+            processed = embedImages(htmlFile.getParentFile(), processed);
+        } else {
+            processed = htmlContent;
+        }
+        final String finalHtml = processed;
+
         Platform.runLater(() -> {
             if (webEngine == null) return;
-            if (htmlFile != null) {
-                String processed = inlineExternalStyles(htmlFile.getParentFile(), htmlContent);
-                // Embed images as base64 data URIs for reliable display in jpackage builds
-                processed = embedImages(htmlFile.getParentFile(), processed);
-                try {
-                    File tempFile = new File(htmlFile.getParentFile(), ".layoutlynx-preview.html");
-                    java.nio.file.Files.writeString(tempFile.toPath(), processed);
-                    tempFile.deleteOnExit();
-                    webEngine.load(tempFile.toURI().toString());
-                } catch (java.io.IOException e) {
-                    webEngine.loadContent(processed, "text/html");
-                }
-            } else {
-                webEngine.loadContent(htmlContent, "text/html");
-            }
+            // Use loadContent directly — data URIs are self-contained so no
+            // external file access is needed by WebView.
+            webEngine.loadContent(finalHtml, "text/html");
         });
     }
 
