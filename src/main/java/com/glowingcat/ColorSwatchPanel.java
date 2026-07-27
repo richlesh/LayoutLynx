@@ -34,7 +34,7 @@ public class ColorSwatchPanel extends JPanel {
 
     private static final int SWATCH_SIZE = 10;
     private static final int SWATCH_GAP = 2;
-    private static final int MAX_SWATCHES_PER_LINE = 4;
+    private static final int MAX_SWATCHES_PER_LINE = 2;
     private static final int PANEL_WIDTH = (SWATCH_SIZE + SWATCH_GAP) * MAX_SWATCHES_PER_LINE + 4;
 
     /** Matches #rgb, #rrggbb, #rgba, #rrggbbaa */
