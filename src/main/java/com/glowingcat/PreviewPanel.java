@@ -465,79 +465,168 @@ public class PreviewPanel extends JPanel {
      * even when the HTML is rendered from a temp file in a different directory.
      */
     private String resolveRelativePaths(File baseDir, String html) {
-        // Match src="..." or src='...' attributes
-        java.util.regex.Pattern attrPattern = java.util.regex.Pattern.compile(
-            "((?:src|poster)\\s*=\\s*[\"'])([^\"']+)([\"'])",
-            java.util.regex.Pattern.CASE_INSENSITIVE);
+        // Process src="..." and src='...' attributes — embed images as data URIs
+        html = resolveAttributes(baseDir, html, "src");
+        html = resolveAttributes(baseDir, html, "poster");
+        // Process CSS url() references (background-image, etc.)
+        html = resolveCssUrls(baseDir, html);
+        return html;
+    }
 
-        java.util.regex.Matcher matcher = attrPattern.matcher(html);
-        StringBuilder sb = new StringBuilder();
-        while (matcher.find()) {
-            String path = matcher.group(2);
-            // Skip absolute URLs, data URIs, and fragment-only refs
-            if (path.startsWith("http://") || path.startsWith("https://")
-                    || path.startsWith("data:") || path.startsWith("file://")
-                    || path.startsWith("#") || path.startsWith("//")) {
-                matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(matcher.group()));
+    /**
+     * Finds all occurrences of attrName="value" or attrName='value' and resolves
+     * relative paths to data URIs.
+     */
+    private String resolveAttributes(File baseDir, String html, String attrName) {
+        StringBuilder result = new StringBuilder();
+        String searchLower = html.toLowerCase();
+        int pos = 0;
+
+        while (pos < html.length()) {
+            // Find next occurrence of the attribute name
+            int attrIdx = searchLower.indexOf(attrName + "=", pos);
+            if (attrIdx < 0) {
+                result.append(html, pos, html.length());
+                break;
+            }
+
+            // Ensure it's preceded by whitespace (not part of another word like "datasrc")
+            if (attrIdx > 0 && Character.isLetterOrDigit(html.charAt(attrIdx - 1))) {
+                result.append(html, pos, attrIdx + 1);
+                pos = attrIdx + 1;
                 continue;
             }
-            // Resolve relative path and embed as data URI for reliable cross-platform display
-            String decodedPath = path.replace("%20", " ");
-            File resolved = new File(baseDir, decodedPath);
-            String replacement;
-            if (resolved.isFile()) {
-                String dataUri = fileToDataUri(resolved);
-                if (dataUri != null) {
-                    replacement = matcher.group(1) + dataUri + matcher.group(3);
+
+            // Find the quote character after =
+            int eqIdx = attrIdx + attrName.length(); // points to '='
+            int afterEq = eqIdx + 1;
+            // Skip whitespace between = and quote
+            while (afterEq < html.length() && html.charAt(afterEq) == ' ') afterEq++;
+            if (afterEq >= html.length()) {
+                result.append(html, pos, html.length());
+                break;
+            }
+
+            char quote = html.charAt(afterEq);
+            if (quote != '"' && quote != '\'') {
+                // No quote — skip this occurrence
+                result.append(html, pos, afterEq);
+                pos = afterEq;
+                continue;
+            }
+
+            // Find closing quote
+            int valueStart = afterEq + 1;
+            int valueEnd = html.indexOf(quote, valueStart);
+            if (valueEnd < 0) {
+                result.append(html, pos, html.length());
+                break;
+            }
+
+            String path = html.substring(valueStart, valueEnd);
+
+            // Append everything up to the value
+            result.append(html, pos, valueStart);
+
+            // Check if path needs resolving
+            if (path.startsWith("http://") || path.startsWith("https://")
+                    || path.startsWith("data:") || path.startsWith("file://")
+                    || path.startsWith("#") || path.startsWith("//") || path.isEmpty()) {
+                result.append(path);
+            } else {
+                // Resolve to data URI
+                String decodedPath;
+                try {
+                    decodedPath = java.net.URLDecoder.decode(path, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    decodedPath = path;
+                }
+                File resolved = new File(baseDir, decodedPath);
+                if (resolved.isFile()) {
+                    String dataUri = fileToDataUri(resolved);
+                    result.append(dataUri != null ? dataUri : path);
                 } else {
-                    // Fallback to absolute file URI if data URI fails
-                    replacement = matcher.group(1) + resolved.toPath().normalize().toUri().toString() + matcher.group(3);
+                    result.append(path);
+                }
+            }
+
+            pos = valueEnd; // will include the closing quote on next iteration
+            result.append(quote);
+            pos = valueEnd + 1;
+        }
+
+        return result.toString();
+    }
+
+    /**
+     * Resolves CSS url() references to data URIs for image files.
+     */
+    private String resolveCssUrls(File baseDir, String html) {
+        StringBuilder result = new StringBuilder();
+        String searchLower = html.toLowerCase();
+        int pos = 0;
+
+        while (pos < html.length()) {
+            int urlIdx = searchLower.indexOf("url(", pos);
+            if (urlIdx < 0) {
+                result.append(html, pos, html.length());
+                break;
+            }
+
+            result.append(html, pos, urlIdx + 4); // append up to and including "url("
+
+            int afterParen = urlIdx + 4;
+            // Check for optional quote
+            char quote = 0;
+            if (afterParen < html.length() && (html.charAt(afterParen) == '"' || html.charAt(afterParen) == '\'')) {
+                quote = html.charAt(afterParen);
+                result.append(quote);
+                afterParen++;
+            }
+
+            // Find end of URL value
+            int valueEnd;
+            if (quote != 0) {
+                valueEnd = html.indexOf(quote, afterParen);
+                if (valueEnd < 0) {
+                    result.append(html, afterParen, html.length());
+                    break;
                 }
             } else {
-                // File doesn't exist — keep original path
-                replacement = matcher.group();
+                valueEnd = html.indexOf(')', afterParen);
+                if (valueEnd < 0) {
+                    result.append(html, afterParen, html.length());
+                    break;
+                }
             }
-            matcher.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(replacement));
-        }
-        matcher.appendTail(sb);
 
-        // Also resolve url() references in inline styles (background-image, etc.)
-        java.util.regex.Pattern urlPattern = java.util.regex.Pattern.compile(
-            "(url\\([\"']?)([^\"')]+)([\"']?\\))",
-            java.util.regex.Pattern.CASE_INSENSITIVE);
+            String path = html.substring(afterParen, valueEnd);
 
-        matcher = urlPattern.matcher(sb.toString());
-        StringBuilder sb2 = new StringBuilder();
-        while (matcher.find()) {
-            String path = matcher.group(2);
+            // Check if path needs resolving
             if (path.startsWith("http://") || path.startsWith("https://")
                     || path.startsWith("data:") || path.startsWith("file://")
-                    || path.startsWith("#") || path.startsWith("//")) {
-                matcher.appendReplacement(sb2, java.util.regex.Matcher.quoteReplacement(matcher.group()));
-                continue;
-            }
-            String decodedPath = path.replace("%20", " ");
-            File resolved = new File(baseDir, decodedPath);
-            if (resolved.isFile()) {
-                String dataUri = fileToDataUri(resolved);
-                if (dataUri != null) {
-                    matcher.appendReplacement(sb2,
-                        java.util.regex.Matcher.quoteReplacement(matcher.group(1) + dataUri + matcher.group(3)));
-                    continue;
+                    || path.startsWith("#") || path.startsWith("//") || path.isEmpty()) {
+                result.append(path);
+            } else {
+                String decodedPath;
+                try {
+                    decodedPath = java.net.URLDecoder.decode(path, java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    decodedPath = path;
+                }
+                File resolved = new File(baseDir, decodedPath);
+                if (resolved.isFile()) {
+                    String dataUri = fileToDataUri(resolved);
+                    result.append(dataUri != null ? dataUri : path);
+                } else {
+                    result.append(path);
                 }
             }
-            // Fallback: absolute file URI
-            if (resolved.isFile()) {
-                String absUri = resolved.toPath().normalize().toUri().toString();
-                matcher.appendReplacement(sb2,
-                    java.util.regex.Matcher.quoteReplacement(matcher.group(1) + absUri + matcher.group(3)));
-            } else {
-                matcher.appendReplacement(sb2, java.util.regex.Matcher.quoteReplacement(matcher.group()));
-            }
-        }
-        matcher.appendTail(sb2);
 
-        return sb2.toString();
+            pos = valueEnd;
+        }
+
+        return result.toString();
     }
 
     /**
