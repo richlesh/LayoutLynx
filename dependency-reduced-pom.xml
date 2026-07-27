@@ -34,6 +34,7 @@
                 <transformer>
                   <mainClass>com.glowingcat.Main</mainClass>
                 </transformer>
+                <transformer />
               </transformers>
               <filters>
                 <filter>
@@ -69,6 +70,7 @@
                     <transformer>
                       <mainClass>com.glowingcat.Main</mainClass>
                     </transformer>
+                    <transformer />
                   </transformers>
                   <artifactSet>
                     <excludes>
