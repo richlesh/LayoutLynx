@@ -155,8 +155,9 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki \
+              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
+              --java-options "--enable-native-access=ALL-UNNAMED" \
               --type app-image
           elif [ "${{ runner.os }}" = "Linux" ]; then
             jpackage \
@@ -169,9 +170,9 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki \
+              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
-              --java-options "-Dawt.useSystemAAFontSettings=on" \
+              --java-options "--enable-native-access=ALL-UNNAMED -Dawt.useSystemAAFontSettings=on" \
               --type app-image
 
             # Remove native sound libraries to eliminate libasound2 dependency
@@ -203,8 +204,9 @@ jobs:
               --copyright "(C) 2026 Glowing Cat" \
               --description "A lightweight HTML/CSS editor with live preview" \
               --icon "${{ matrix.icon }}" \
-              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki \
+              --add-modules javafx.controls,javafx.web,javafx.swing,java.net.http,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.jsobject \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
+              --java-options "--enable-native-access=ALL-UNNAMED" \
               --win-menu \
               --win-shortcut \
               --type ${{ matrix.pkg_type }}
