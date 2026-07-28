@@ -103,8 +103,6 @@ public class AboutDialog {
 
         dialog.setContentPane(panel);
         dialog.pack();
-        // Make dialog 60% wider than the packed size
-        dialog.setSize((int)(dialog.getWidth() * 1.6), dialog.getHeight());
         dialog.setLocationRelativeTo(parent);
         dialog.setVisible(true);
     }
