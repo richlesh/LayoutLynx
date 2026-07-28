@@ -1500,13 +1500,33 @@ public class EditorWindow {
     private void applyPreferences() {
         boolean dark = preferences.isDarkMode();
 
-        // Apply theme to editor text areas
+        // Apply theme to editor text areas, scrollpanes, and minimaps
         for (TabInfo tab : openTabs.values()) {
             tab.textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
             tab.textArea.setTabSize(preferences.getTabSize());
             tab.textArea.setTabsEmulated(!preferences.isUseTabs());
             tab.textArea.setSelectionColor(preferences.getHighlightColorObj());
             applyEditorTheme(tab.textArea, dark);
+
+            // Theme the scrollpane gutter
+            if (tab.scrollPane != null) {
+                tab.scrollPane.setBackground(dark ? new Color(50, 50, 50) : Color.WHITE);
+                tab.scrollPane.getGutter().setBackground(dark ? new Color(50, 50, 50) : new Color(240, 240, 240));
+                tab.scrollPane.getGutter().setLineNumberColor(dark ? new Color(130, 130, 130) : Color.GRAY);
+                tab.scrollPane.getGutter().setBorderColor(dark ? new Color(60, 60, 60) : new Color(200, 200, 200));
+            }
+
+            // Theme minimap and color swatch panels within the tab component
+            if (tab.tabComponent instanceof JPanel) {
+                for (Component c : ((JPanel) tab.tabComponent).getComponents()) {
+                    if (c instanceof MinimapPanel) {
+                        c.setBackground(dark ? new Color(30, 30, 30) : new Color(240, 240, 240));
+                        c.repaint();
+                    } else if (c instanceof ColorSwatchPanel) {
+                        c.setBackground(dark ? new Color(50, 50, 50) : new Color(240, 240, 240));
+                    }
+                }
+            }
         }
 
         // Apply theme to UI chrome
@@ -1663,6 +1683,10 @@ public class EditorWindow {
                             btn.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
                             btn.setForeground(fgColor);
                             btn.setOpaque(true);
+                            if (!btn.isSelected()) {
+                                btn.setBackground(dark ? new Color(60, 60, 60) : UIManager.getColor("Button.background"));
+                                btn.setContentAreaFilled(true);
+                            }
                         }
                     }
                 }
