@@ -409,7 +409,16 @@ public class PreviewPanel extends JPanel {
             if (colonIdx < 0) return;
             String fileName = cleanSource.substring(0, colonIdx).trim();
             String selector = cleanSource.substring(colonIdx + 3).trim();
-            EditorWindow editor = EditorWindow.getActiveInstance();
+            EditorWindow editor = null;
+            // Find the EditorWindow that owns this preview panel (not just the active one)
+            Frame ownerFrame = (Frame) SwingUtilities.getWindowAncestor(PreviewPanel.this);
+            for (EditorWindow instance : EditorWindow.openInstances) {
+                if (instance.getFrame() == ownerFrame) {
+                    editor = instance;
+                    break;
+                }
+            }
+            if (editor == null) editor = EditorWindow.getActiveInstance();
             if (editor != null) {
                 if ("inline".equals(fileName)) {
                     // "inline" means a <style> block in the HTML file
