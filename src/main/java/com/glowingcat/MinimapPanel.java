@@ -20,7 +20,7 @@ import java.awt.image.BufferedImage;
  */
 class MinimapPanel extends JPanel {
 
-    private static final int MINIMAP_WIDTH = 80;
+    private static final int MINIMAP_WIDTH = 40;
     private static final float SCALE = 0.15f;
     private static final int LINE_HEIGHT = 2;
 
