@@ -144,6 +144,59 @@ public class AIChatPanel extends JPanel {
         chatPanel.repaint();
     }
 
+    /** Apply dark or light theme to the AI panel. */
+    public void applyTheme(boolean dark) {
+        Color bg = dark ? new Color(43, 43, 43) : UIManager.getColor("Panel.background");
+        Color chatBg = dark ? new Color(35, 35, 35) : new Color(245, 245, 245);
+        Color inputBg = dark ? new Color(55, 55, 55) : Color.WHITE;
+        Color fg = dark ? new Color(187, 187, 187) : Color.BLACK;
+        Color btnBg = dark ? new Color(70, 70, 70) : UIManager.getColor("Button.background");
+        Color btnFg = dark ? new Color(220, 220, 220) : UIManager.getColor("Button.foreground");
+
+        setBackground(bg);
+        chatPanel.setBackground(chatBg);
+        chatScroll.setBackground(chatBg);
+        chatScroll.getViewport().setBackground(chatBg);
+        inputArea.setBackground(inputBg);
+        inputArea.setForeground(fg);
+        inputArea.setCaretColor(fg);
+        sendBtn.setBackground(btnBg);
+        sendBtn.setForeground(btnFg);
+
+        // Update the border
+        setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(dark ? new Color(80, 80, 80) : Color.LIGHT_GRAY),
+            "AI Assistant", javax.swing.border.TitledBorder.DEFAULT_JUSTIFICATION,
+            javax.swing.border.TitledBorder.DEFAULT_POSITION,
+            null, fg));
+
+        // Update bottom panel
+        Component south = ((BorderLayout) getLayout()).getLayoutComponent(BorderLayout.SOUTH);
+        if (south instanceof JPanel) {
+            applyDarkToPanel((JPanel) south, bg, fg, btnBg, btnFg, inputBg, dark);
+        }
+
+        revalidate();
+        repaint();
+    }
+
+    private void applyDarkToPanel(JPanel panel, Color bg, Color fg, Color btnBg, Color btnFg, Color inputBg, boolean dark) {
+        panel.setBackground(bg);
+        for (Component c : panel.getComponents()) {
+            if (c instanceof JPanel) {
+                applyDarkToPanel((JPanel) c, bg, fg, btnBg, btnFg, inputBg, dark);
+            } else if (c instanceof JButton) {
+                c.setBackground(btnBg);
+                c.setForeground(btnFg);
+            } else if (c instanceof JScrollPane) {
+                ((JScrollPane) c).getViewport().setBackground(inputBg);
+                c.setBackground(inputBg);
+            } else if (c instanceof JLabel) {
+                c.setForeground(fg);
+            }
+        }
+    }
+
     private void updateFontRecursive(Component c, Font font) {
         if (c instanceof JTextArea) c.setFont(font);
         if (c instanceof JTextPane) c.setFont(font);

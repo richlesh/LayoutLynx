@@ -1623,8 +1623,23 @@ public class EditorWindow {
 
         // AI chat panel
         if (aiChatPanel != null) {
-            aiChatPanel.setBackground(bgColor);
+            aiChatPanel.applyTheme(dark);
             aiChatPanel.updateFont();
+        }
+
+        // Toolbar toggle buttons — use generic BasicToggleButtonUI to avoid
+        // macOS LAF's darker highlight
+        if (hiddenCharsToggle != null) {
+            hiddenCharsToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
+            hiddenCharsToggle.setForeground(fgColor);
+        }
+        if (previewToggle != null) {
+            previewToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
+            previewToggle.setForeground(fgColor);
+        }
+        if (aiToggle != null) {
+            aiToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
+            aiToggle.setForeground(fgColor);
         }
 
         // Update all scrollbars in the frame
