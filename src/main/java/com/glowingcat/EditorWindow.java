@@ -129,6 +129,17 @@ public class EditorWindow {
             }
         });
         frame.setSize(preferences.getWindowWidth(), preferences.getWindowHeight());
+        frame.setAutoRequestFocus(true);
+
+        // macOS + JFXPanel workaround: clicking on a background window may not
+        // bring it to front because JFXPanel captures mouse events at the native level.
+        // This listener detects when the window becomes active and ensures it's raised.
+        frame.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowActivated(WindowEvent e) {
+                frame.toFront();
+            }
+        });
 
         // Application icon
         java.net.URL iconUrl = getClass().getClassLoader().getResource("app_icon_256.png");
