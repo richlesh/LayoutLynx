@@ -22,7 +22,7 @@ class MinimapPanel extends JPanel {
 
     private static final int MINIMAP_WIDTH = 40;
     private static final float SCALE = 0.15f;
-    private static final int LINE_HEIGHT = 2;
+    private static final int LINE_HEIGHT = 1;
 
     private final RSyntaxTextArea textArea;
     private RTextScrollPane scrollPane;
