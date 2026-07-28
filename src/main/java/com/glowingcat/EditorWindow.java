@@ -1665,6 +1665,26 @@ public class EditorWindow {
         // Update all scrollbars in the frame (this resets component UIs to system LAF)
         SwingUtilities.updateComponentTreeUI(frame);
 
+        // Re-apply custom tree cell renderer (updateComponentTreeUI may reset it)
+        if (fileTree != null) {
+            fileTree.setCellRenderer(new javax.swing.tree.DefaultTreeCellRenderer() {
+                @Override
+                public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel,
+                        boolean expanded, boolean leaf, int row, boolean hasFocus) {
+                    super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+                    setIcon(getLeafIcon());
+                    return this;
+                }
+            });
+            // Re-apply dark mode colors to the new renderer
+            javax.swing.tree.DefaultTreeCellRenderer renderer =
+                (javax.swing.tree.DefaultTreeCellRenderer) fileTree.getCellRenderer();
+            renderer.setBackgroundNonSelectionColor(dark ? darkBgAlt : Color.WHITE);
+            renderer.setTextNonSelectionColor(fgColor);
+            renderer.setBackgroundSelectionColor(dark ? new Color(70, 70, 100) : UIManager.getColor("Tree.selectionBackground"));
+            renderer.setTextSelectionColor(dark ? Color.WHITE : UIManager.getColor("Tree.selectionForeground"));
+        }
+
         // Re-apply BasicToggleButtonUI AFTER updateComponentTreeUI since it resets to Aqua
         Color btnHighlight = preferences.getButtonHighlightColorObj();
         if (hiddenCharsToggle != null) {

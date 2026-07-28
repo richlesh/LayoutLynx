@@ -37,7 +37,11 @@ class MinimapPanel extends JPanel {
 
         // Rebuild minimap when document changes
         textArea.getDocument().addDocumentListener(new DocumentListener() {
-            private final Timer debounce = new Timer(200, e -> { needsRepaint = true; repaint(); });
+            private final Timer debounce = new Timer(300, e -> {
+                needsRepaint = true;
+                minimapImage = null; // Force full re-render
+                repaint();
+            });
             { debounce.setRepeats(false); }
             public void insertUpdate(DocumentEvent e) { debounce.restart(); }
             public void removeUpdate(DocumentEvent e) { debounce.restart(); }
@@ -109,8 +113,11 @@ class MinimapPanel extends JPanel {
         g2.fillRect(0, 0, width, height);
 
         // Draw minimap lines (colored by content density)
-        if (needsRepaint || minimapImage == null || minimapImage.getHeight() != Math.min(docHeight, height)) {
-            renderMinimap(width, Math.min(docHeight, height), dark);
+        int renderHeight = Math.min(docHeight, height);
+        if (needsRepaint || minimapImage == null
+                || minimapImage.getHeight() != renderHeight
+                || minimapImage.getWidth() != width) {
+            renderMinimap(width, renderHeight, dark);
             needsRepaint = false;
         }
 
@@ -162,33 +169,39 @@ class MinimapPanel extends JPanel {
         Color stringColor = dark ? new Color(120, 100, 80) : new Color(160, 100, 40);
 
         try {
+            int docLength = textArea.getDocument().getLength();
             for (int line = 0; line < totalLines && line * LINE_HEIGHT < height; line++) {
-                int start = textArea.getLineStartOffset(line);
-                int end = textArea.getLineEndOffset(line) - 1;
-                if (end <= start) continue;
+                try {
+                    int start = textArea.getLineStartOffset(line);
+                    int end = textArea.getLineEndOffset(line) - 1;
+                    if (end <= start || start >= docLength) continue;
+                    end = Math.min(end, docLength);
 
-                String lineText = textArea.getText(start, end - start);
-                String trimmed = lineText.stripLeading();
-                if (trimmed.isEmpty()) continue;
+                    String lineText = textArea.getText(start, end - start);
+                    String trimmed = lineText.stripLeading();
+                    if (trimmed.isEmpty()) continue;
 
-                int indent = lineText.length() - trimmed.length();
-                int x = (int) (indent * SCALE * 6);
-                int lineWidth = (int) (trimmed.length() * SCALE * 6);
-                lineWidth = Math.min(lineWidth, width - x);
+                    int indent = lineText.length() - trimmed.length();
+                    int x = (int) (indent * SCALE * 6);
+                    int lineWidth = (int) (trimmed.length() * SCALE * 6);
+                    lineWidth = Math.min(lineWidth, width - x);
 
-                // Simple heuristic coloring
-                Color c;
-                if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
-                    c = commentColor;
-                } else if (trimmed.contains("\"") || trimmed.contains("'")) {
-                    c = stringColor;
-                } else {
-                    c = codeColor;
+                    // Simple heuristic coloring
+                    Color c;
+                    if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) {
+                        c = commentColor;
+                    } else if (trimmed.contains("\"") || trimmed.contains("'")) {
+                        c = stringColor;
+                    } else {
+                        c = codeColor;
+                    }
+
+                    g.setColor(c);
+                    int y = line * LINE_HEIGHT;
+                    g.fillRect(x, y, Math.max(1, lineWidth), LINE_HEIGHT);
+                } catch (Exception ex) {
+                    // Skip this line if offsets are stale
                 }
-
-                g.setColor(c);
-                int y = line * LINE_HEIGHT;
-                g.fillRect(x, y, Math.max(1, lineWidth), LINE_HEIGHT);
             }
         } catch (Exception e) {
             // Best effort
