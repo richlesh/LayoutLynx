@@ -1512,22 +1512,123 @@ public class EditorWindow {
         // Apply theme to UI chrome
         Color bgColor = dark ? new Color(43, 43, 43) : UIManager.getColor("Panel.background");
         Color fgColor = dark ? new Color(187, 187, 187) : UIManager.getColor("Panel.foreground");
-        Color borderColor = dark ? new Color(60, 60, 60) : Color.LIGHT_GRAY;
+        Color darkBg = new Color(43, 43, 43);
+        Color darkBgAlt = new Color(50, 50, 50);
+        Color darkBorder = new Color(60, 60, 60);
 
+        // Set global UI defaults for scrollbars and controls in dark mode
+        if (dark) {
+            UIManager.put("ScrollBar.thumb", new Color(80, 80, 80));
+            UIManager.put("ScrollBar.track", darkBg);
+            UIManager.put("ScrollBar.thumbDarkShadow", darkBorder);
+            UIManager.put("ScrollBar.thumbHighlight", new Color(90, 90, 90));
+            UIManager.put("ScrollBar.thumbShadow", new Color(60, 60, 60));
+            UIManager.put("SplitPane.background", darkBg);
+            UIManager.put("TabbedPane.background", darkBg);
+            UIManager.put("TabbedPane.foreground", fgColor);
+            UIManager.put("Panel.background", darkBg);
+            UIManager.put("Panel.foreground", fgColor);
+        } else {
+            // Reset to system defaults
+            UIManager.put("ScrollBar.thumb", null);
+            UIManager.put("ScrollBar.track", null);
+            UIManager.put("ScrollBar.thumbDarkShadow", null);
+            UIManager.put("ScrollBar.thumbHighlight", null);
+            UIManager.put("ScrollBar.thumbShadow", null);
+            UIManager.put("SplitPane.background", null);
+            UIManager.put("TabbedPane.background", null);
+            UIManager.put("TabbedPane.foreground", null);
+            UIManager.put("Panel.background", null);
+            UIManager.put("Panel.foreground", null);
+        }
+
+        // Frame and content pane
         frame.getContentPane().setBackground(bgColor);
-        if (fileTree != null) {
-            fileTree.setBackground(dark ? new Color(50, 50, 50) : Color.WHITE);
-            fileTree.setForeground(fgColor);
+
+        // Toolbar
+        Component toolbar = ((BorderLayout) frame.getContentPane().getLayout()).getLayoutComponent(BorderLayout.NORTH);
+        if (toolbar != null) {
+            toolbar.setBackground(bgColor);
+            toolbar.setForeground(fgColor);
+            if (toolbar instanceof JPanel) {
+                for (Component c : ((JPanel) toolbar).getComponents()) {
+                    c.setBackground(bgColor);
+                    c.setForeground(fgColor);
+                    if (c instanceof JPanel) {
+                        for (Component cc : ((JPanel) c).getComponents()) {
+                            if (cc instanceof JToggleButton) {
+                                // Don't override toggle button colors (they have active state)
+                            } else {
+                                cc.setForeground(fgColor);
+                            }
+                        }
+                    }
+                }
+            }
         }
-        if (editorTabs != null) {
-            editorTabs.setBackground(bgColor);
-            editorTabs.setForeground(fgColor);
-        }
+
+        // File path label
         if (filePathLabel != null) {
             filePathLabel.setForeground(fgColor);
         }
 
-        if (aiChatPanel != null) aiChatPanel.updateFont();
+        // File tree
+        if (fileTree != null) {
+            fileTree.setBackground(dark ? darkBgAlt : Color.WHITE);
+            fileTree.setForeground(fgColor);
+            // Update tree cell renderer colors
+            javax.swing.tree.DefaultTreeCellRenderer renderer =
+                (javax.swing.tree.DefaultTreeCellRenderer) fileTree.getCellRenderer();
+            renderer.setBackgroundNonSelectionColor(dark ? darkBgAlt : Color.WHITE);
+            renderer.setTextNonSelectionColor(fgColor);
+            renderer.setBackgroundSelectionColor(dark ? new Color(70, 70, 100) : UIManager.getColor("Tree.selectionBackground"));
+            renderer.setTextSelectionColor(dark ? Color.WHITE : UIManager.getColor("Tree.selectionForeground"));
+            fileTree.getParent().setBackground(dark ? darkBgAlt : Color.WHITE);
+        }
+
+        // Tabbed pane
+        if (editorTabs != null) {
+            editorTabs.setBackground(bgColor);
+            editorTabs.setForeground(fgColor);
+        }
+
+        // Split panes
+        if (treeEditorSplit != null) {
+            treeEditorSplit.setBackground(bgColor);
+            treeEditorSplit.setBorder(null);
+        }
+        if (editorPreviewSplit != null) {
+            editorPreviewSplit.setBackground(bgColor);
+            editorPreviewSplit.setBorder(null);
+        }
+        if (mainSplit != null) {
+            mainSplit.setBackground(bgColor);
+            mainSplit.setBorder(null);
+        }
+
+        // Preview panel
+        if (previewPanel != null) {
+            previewPanel.setBackground(bgColor);
+            // Update breakpoint toolbar if present
+            for (Component c : previewPanel.getComponents()) {
+                if (c instanceof JPanel) {
+                    c.setBackground(bgColor);
+                    c.setForeground(fgColor);
+                    for (Component cc : ((JPanel) c).getComponents()) {
+                        if (cc instanceof JLabel) cc.setForeground(fgColor);
+                    }
+                }
+            }
+        }
+
+        // AI chat panel
+        if (aiChatPanel != null) {
+            aiChatPanel.setBackground(bgColor);
+            aiChatPanel.updateFont();
+        }
+
+        // Update all scrollbars in the frame
+        SwingUtilities.updateComponentTreeUI(frame);
         frame.repaint();
     }
 
