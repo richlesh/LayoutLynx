@@ -786,6 +786,16 @@ public class EditorWindow {
             tabInfo.tabComponent = editorWithSwatches;
         }
 
+        // Add color swatch gutter for HTML files (inline styles and color attributes)
+        if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(syntaxStyle)) {
+            ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
+            swatchPanel.setEditorScrollPane(scrollPane);
+            JPanel editorWithSwatches = new JPanel(new BorderLayout());
+            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
+            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
+            tabInfo.tabComponent = editorWithSwatches;
+        }
+
         // Wire up undo and document change listener
         textArea.getDocument().addUndoableEditListener(tabInfo.undoManager);
         textArea.getDocument().addDocumentListener(new DocumentListener() {
@@ -844,6 +854,16 @@ public class EditorWindow {
         if (SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntaxStyle)) {
             CssSpecificityTooltip.install(textArea);
             CssCompletionProvider.install(textArea);
+            ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
+            swatchPanel.setEditorScrollPane(scrollPane);
+            JPanel editorWithSwatches = new JPanel(new BorderLayout());
+            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
+            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
+            tabInfo.tabComponent = editorWithSwatches;
+        }
+
+        // Add color swatch gutter for HTML files (inline styles and color attributes)
+        if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(syntaxStyle)) {
             ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
             swatchPanel.setEditorScrollPane(scrollPane);
             JPanel editorWithSwatches = new JPanel(new BorderLayout());
