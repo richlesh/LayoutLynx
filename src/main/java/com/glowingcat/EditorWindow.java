@@ -1666,22 +1666,38 @@ public class EditorWindow {
         SwingUtilities.updateComponentTreeUI(frame);
 
         // Re-apply BasicToggleButtonUI AFTER updateComponentTreeUI since it resets to Aqua
+        Color btnHighlight = preferences.getButtonHighlightColorObj();
         if (hiddenCharsToggle != null) {
             hiddenCharsToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
             hiddenCharsToggle.setForeground(fgColor);
+            if (hiddenCharsVisible) {
+                hiddenCharsToggle.setBackground(btnHighlight);
+                hiddenCharsToggle.setContentAreaFilled(true);
+                hiddenCharsToggle.setOpaque(true);
+            }
         }
         if (previewToggle != null) {
             previewToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
             previewToggle.setForeground(fgColor);
+            if (previewVisible) {
+                previewToggle.setBackground(btnHighlight);
+                previewToggle.setContentAreaFilled(true);
+                previewToggle.setOpaque(true);
+            }
         }
         if (aiToggle != null) {
             aiToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
             aiToggle.setForeground(fgColor);
+            if (aiVisible) {
+                aiToggle.setBackground(btnHighlight);
+                aiToggle.setContentAreaFilled(true);
+                aiToggle.setOpaque(true);
+            }
         }
 
         // Re-apply to responsive breakpoint buttons
         if (previewPanel != null) {
-            Color selectedColor = preferences.getButtonHighlightColorObj(); // Gold highlight matching toolbar
+            Color selectedColor = preferences.getButtonHighlightColorObj();
             Color unselectedBg = dark ? new Color(60, 60, 60) : UIManager.getColor("Button.background");
             for (Component c : previewPanel.getComponents()) {
                 if (c instanceof JPanel) {
@@ -1693,12 +1709,15 @@ public class EditorWindow {
                             btn.setOpaque(true);
                             btn.setContentAreaFilled(true);
                             btn.setBackground(btn.isSelected() ? selectedColor : unselectedBg);
-                            // Store colors for dynamic update and remove old item listeners
+                            // Remove ALL existing item listeners (we'll re-add ours)
                             for (ItemListener il : btn.getItemListeners()) {
-                                if (il.getClass().isAnonymousClass()) btn.removeItemListener(il);
+                                btn.removeItemListener(il);
                             }
+                            // Use preferences reference so color is always current
                             btn.addItemListener(e -> {
-                                btn.setBackground(btn.isSelected() ? selectedColor : unselectedBg);
+                                Color sel = preferences.getButtonHighlightColorObj();
+                                Color unsel = preferences.isDarkMode() ? new Color(60, 60, 60) : UIManager.getColor("Button.background");
+                                btn.setBackground(btn.isSelected() ? sel : unsel);
                             });
                         }
                     }
