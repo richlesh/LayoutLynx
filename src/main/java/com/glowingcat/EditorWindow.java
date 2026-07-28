@@ -1636,8 +1636,10 @@ public class EditorWindow {
             aiChatPanel.updateFont();
         }
 
-        // Toolbar toggle buttons — use generic BasicToggleButtonUI to avoid
-        // macOS LAF's darker highlight
+        // Update all scrollbars in the frame (this resets component UIs to system LAF)
+        SwingUtilities.updateComponentTreeUI(frame);
+
+        // Re-apply BasicToggleButtonUI AFTER updateComponentTreeUI since it resets to Aqua
         if (hiddenCharsToggle != null) {
             hiddenCharsToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
             hiddenCharsToggle.setForeground(fgColor);
@@ -1651,8 +1653,27 @@ public class EditorWindow {
             aiToggle.setForeground(fgColor);
         }
 
-        // Update all scrollbars in the frame
-        SwingUtilities.updateComponentTreeUI(frame);
+        // Re-apply to responsive breakpoint buttons
+        if (previewPanel != null) {
+            for (Component c : previewPanel.getComponents()) {
+                if (c instanceof JPanel) {
+                    for (Component cc : ((JPanel) c).getComponents()) {
+                        if (cc instanceof JToggleButton) {
+                            JToggleButton btn = (JToggleButton) cc;
+                            btn.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
+                            btn.setForeground(fgColor);
+                            btn.setOpaque(true);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Re-apply to AI panel buttons
+        if (aiChatPanel != null) {
+            aiChatPanel.applyTheme(dark);
+        }
+
         frame.repaint();
     }
 
