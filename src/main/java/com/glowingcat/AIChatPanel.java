@@ -186,8 +186,11 @@ public class AIChatPanel extends JPanel {
             if (c instanceof JPanel) {
                 applyDarkToPanel((JPanel) c, bg, fg, btnBg, btnFg, inputBg, dark);
             } else if (c instanceof JButton) {
-                c.setBackground(btnBg);
-                c.setForeground(btnFg);
+                JButton btn = (JButton) c;
+                btn.setUI(new javax.swing.plaf.basic.BasicButtonUI());
+                btn.setBackground(btnBg);
+                btn.setForeground(btnFg);
+                btn.setOpaque(true);
             } else if (c instanceof JScrollPane) {
                 ((JScrollPane) c).getViewport().setBackground(inputBg);
                 c.setBackground(inputBg);

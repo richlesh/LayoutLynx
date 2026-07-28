@@ -1609,13 +1609,22 @@ public class EditorWindow {
         // Preview panel
         if (previewPanel != null) {
             previewPanel.setBackground(bgColor);
-            // Update breakpoint toolbar if present
+            // Update breakpoint toolbar buttons
             for (Component c : previewPanel.getComponents()) {
                 if (c instanceof JPanel) {
                     c.setBackground(bgColor);
                     c.setForeground(fgColor);
                     for (Component cc : ((JPanel) c).getComponents()) {
                         if (cc instanceof JLabel) cc.setForeground(fgColor);
+                        if (cc instanceof JToggleButton) {
+                            JToggleButton btn = (JToggleButton) cc;
+                            btn.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
+                            btn.setForeground(fgColor);
+                            btn.setOpaque(true);
+                            if (!btn.isSelected()) {
+                                btn.setBackground(bgColor);
+                            }
+                        }
                     }
                 }
             }
