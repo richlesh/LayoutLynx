@@ -1511,8 +1511,15 @@ public class EditorWindow {
             tab.textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
             tab.textArea.setTabSize(preferences.getTabSize());
             tab.textArea.setTabsEmulated(!preferences.isUseTabs());
-            tab.textArea.setSelectionColor(preferences.getHighlightColorObj());
             applyEditorTheme(tab.textArea, dark);
+            // Re-apply user settings AFTER theme (theme overwrites these)
+            tab.textArea.setSelectionColor(preferences.getHighlightColorObj());
+            // Disable colored backgrounds for embedded CSS/JS in HTML files
+            if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(tab.textArea.getSyntaxEditingStyle())) {
+                tab.textArea.setSecondaryLanguageBackground(1, null);
+                tab.textArea.setSecondaryLanguageBackground(2, null);
+                tab.textArea.setSecondaryLanguageBackground(3, null);
+            }
 
             // Theme the scrollpane gutter
             if (tab.scrollPane != null) {
