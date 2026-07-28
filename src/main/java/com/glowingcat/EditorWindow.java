@@ -777,27 +777,30 @@ public class EditorWindow {
 
         TabInfo tabInfo = new TabInfo(textArea, scrollPane, file);
 
-        // Add color swatch gutter and specificity tooltip only for CSS files
+        // Build the editor panel with optional color swatches (left) and minimap (right)
+        JPanel editorPanel = new JPanel(new BorderLayout());
+
         if (SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntaxStyle)) {
             CssSpecificityTooltip.install(textArea);
             CssCompletionProvider.install(textArea);
             ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
             swatchPanel.setEditorScrollPane(scrollPane);
-            JPanel editorWithSwatches = new JPanel(new BorderLayout());
-            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
-            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
-            tabInfo.tabComponent = editorWithSwatches;
+            editorPanel.add(swatchPanel, BorderLayout.WEST);
         }
 
-        // Add color swatch gutter for HTML files (inline styles and color attributes)
         if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(syntaxStyle)) {
             ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
             swatchPanel.setEditorScrollPane(scrollPane);
-            JPanel editorWithSwatches = new JPanel(new BorderLayout());
-            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
-            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
-            tabInfo.tabComponent = editorWithSwatches;
+            editorPanel.add(swatchPanel, BorderLayout.WEST);
         }
+
+        editorPanel.add(scrollPane, BorderLayout.CENTER);
+
+        MinimapPanel minimap = new MinimapPanel(textArea);
+        minimap.setScrollPane(scrollPane);
+        editorPanel.add(minimap, BorderLayout.EAST);
+
+        tabInfo.tabComponent = editorPanel;
 
         // Wire up undo and document change listener
         textArea.getDocument().addUndoableEditListener(tabInfo.undoManager);
@@ -853,27 +856,30 @@ public class EditorWindow {
 
         TabInfo tabInfo = new TabInfo(textArea, scrollPane, file);
 
-        // Add color swatch gutter and specificity tooltip only for CSS files
+        // Build the editor panel with optional color swatches (left) and minimap (right)
+        JPanel editorPanel = new JPanel(new BorderLayout());
+
         if (SyntaxConstants.SYNTAX_STYLE_CSS.equals(syntaxStyle)) {
             CssSpecificityTooltip.install(textArea);
             CssCompletionProvider.install(textArea);
             ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
             swatchPanel.setEditorScrollPane(scrollPane);
-            JPanel editorWithSwatches = new JPanel(new BorderLayout());
-            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
-            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
-            tabInfo.tabComponent = editorWithSwatches;
+            editorPanel.add(swatchPanel, BorderLayout.WEST);
         }
 
-        // Add color swatch gutter for HTML files (inline styles and color attributes)
         if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(syntaxStyle)) {
             ColorSwatchPanel swatchPanel = new ColorSwatchPanel(textArea);
             swatchPanel.setEditorScrollPane(scrollPane);
-            JPanel editorWithSwatches = new JPanel(new BorderLayout());
-            editorWithSwatches.add(swatchPanel, BorderLayout.WEST);
-            editorWithSwatches.add(scrollPane, BorderLayout.CENTER);
-            tabInfo.tabComponent = editorWithSwatches;
+            editorPanel.add(swatchPanel, BorderLayout.WEST);
         }
+
+        editorPanel.add(scrollPane, BorderLayout.CENTER);
+
+        MinimapPanel minimap = new MinimapPanel(textArea);
+        minimap.setScrollPane(scrollPane);
+        editorPanel.add(minimap, BorderLayout.EAST);
+
+        tabInfo.tabComponent = editorPanel;
 
         // Load file content
         try {
