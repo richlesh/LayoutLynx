@@ -33,6 +33,7 @@ public class PreferencesDialog extends JDialog {
     private final JComboBox<String> previewCodeFontCombo;
     private final JComboBox<Integer> previewCodeSizeCombo;
     private final Color[] highlightColor;
+    private final Color[] buttonHighlightColor;
     private final JCheckBox useTabsBox;
     private final JSpinner tabSizeSpinner;
     private final JComboBox<String> llmVendorCombo;
@@ -90,6 +91,7 @@ public class PreferencesDialog extends JDialog {
 
         // Initialize editor settings
         highlightColor = new Color[]{prefs.getHighlightColorObj()};
+        buttonHighlightColor = new Color[]{prefs.getButtonHighlightColorObj()};
         useTabsBox = new JCheckBox("Use Tabs", prefs.isUseTabs());
         tabSizeSpinner = new JSpinner(new SpinnerNumberModel(prefs.getTabSize(), 1, 8, 1));
 
@@ -333,6 +335,22 @@ public class PreferencesDialog extends JDialog {
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
         panel.add(themeCombo, gbc);
 
+        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
+        panel.add(new JLabel("Button Highlight:"), gbc);
+        JPanel btnHlSwatch = new JPanel();
+        btnHlSwatch.setBackground(buttonHighlightColor[0]);
+        btnHlSwatch.setPreferredSize(new Dimension(60, 24));
+        btnHlSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
+        btnHlSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btnHlSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                Color c = JColorChooser.showDialog(PreferencesDialog.this, "Button Highlight Color", buttonHighlightColor[0]);
+                if (c != null) { buttonHighlightColor[0] = c; btnHlSwatch.setBackground(c); }
+            }
+        });
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
+        panel.add(btnHlSwatch, gbc);
+
         // Vertical glue to push content to top
         gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 1;
         gbc.fill = GridBagConstraints.VERTICAL;
@@ -452,6 +470,7 @@ public class PreferencesDialog extends JDialog {
         prefs.setEditorFontFamily((String) editorFontCombo.getSelectedItem());
         prefs.setEditorFontSize((Integer) editorSizeCombo.getSelectedItem());
         prefs.setTheme("Dark".equals(themeCombo.getSelectedItem()) ? "dark" : "light");
+        prefs.setButtonHighlightColor(buttonHighlightColor[0]);
         prefs.setPreviewFontFamily((String) previewFontCombo.getSelectedItem());
         prefs.setPreviewFontSize((Integer) previewSizeCombo.getSelectedItem());
         prefs.setPreviewCodeFontFamily((String) previewCodeFontCombo.getSelectedItem());

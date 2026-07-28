@@ -562,7 +562,7 @@ public class EditorWindow {
         hiddenCharsToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
         hiddenCharsToggle.addActionListener(e -> {
             hiddenCharsVisible = hiddenCharsToggle.isSelected();
-            hiddenCharsToggle.setBackground(hiddenCharsVisible ? new Color(218, 165, 32) : null);
+            hiddenCharsToggle.setBackground(hiddenCharsVisible ? preferences.getButtonHighlightColorObj() : null);
             hiddenCharsToggle.setContentAreaFilled(hiddenCharsVisible);
             hiddenCharsToggle.setOpaque(hiddenCharsVisible);
             // Apply to all open tabs
@@ -586,7 +586,7 @@ public class EditorWindow {
         previewToggle.setBorderPainted(false);
         previewToggle.setContentAreaFilled(true);
         previewToggle.setOpaque(true);
-        previewToggle.setBackground(new Color(218, 165, 32));
+        previewToggle.setBackground(preferences.getButtonHighlightColorObj());
         previewToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         previewToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
         previewToggle.addActionListener(e -> togglePreview());
@@ -605,7 +605,7 @@ public class EditorWindow {
         aiToggle.setBorderPainted(false);
         aiToggle.setContentAreaFilled(true);
         aiToggle.setOpaque(true);
-        aiToggle.setBackground(new Color(218, 165, 32));
+        aiToggle.setBackground(preferences.getButtonHighlightColorObj());
         aiToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         aiToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
         aiToggle.addActionListener(e -> toggleAI());
@@ -707,7 +707,7 @@ public class EditorWindow {
         }
         editorPreviewSplit.revalidate();
         editorPreviewSplit.repaint();
-        previewToggle.setBackground(previewVisible ? new Color(218, 165, 32) : null);
+        previewToggle.setBackground(previewVisible ? preferences.getButtonHighlightColorObj() : null);
         previewToggle.setContentAreaFilled(previewVisible);
         previewToggle.setOpaque(previewVisible);
     }
@@ -729,7 +729,7 @@ public class EditorWindow {
         }
         mainSplit.revalidate();
         mainSplit.repaint();
-        aiToggle.setBackground(aiVisible ? new Color(218, 165, 32) : null);
+        aiToggle.setBackground(aiVisible ? preferences.getButtonHighlightColorObj() : null);
         aiToggle.setContentAreaFilled(aiVisible);
         aiToggle.setOpaque(aiVisible);
     }
@@ -1675,7 +1675,7 @@ public class EditorWindow {
 
         // Re-apply to responsive breakpoint buttons
         if (previewPanel != null) {
-            Color selectedColor = new Color(218, 165, 32); // Gold highlight matching toolbar
+            Color selectedColor = preferences.getButtonHighlightColorObj(); // Gold highlight matching toolbar
             Color unselectedBg = dark ? new Color(60, 60, 60) : UIManager.getColor("Button.background");
             for (Component c : previewPanel.getComponents()) {
                 if (c instanceof JPanel) {

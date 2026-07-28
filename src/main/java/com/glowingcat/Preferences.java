@@ -58,6 +58,9 @@ public class Preferences {
     /** UI theme: "light" or "dark". */
     private String theme = "light";
 
+    /** Button highlight color (hex string). */
+    private String buttonHighlightColor = "#DAA520";
+
     /** Editor highlight/caret line color (hex string). */
     private String highlightColor = "#E8F2FE";
 
@@ -201,6 +204,11 @@ public class Preferences {
     public String getTheme() { return theme; }
     public void setTheme(String theme) { this.theme = theme; }
     public boolean isDarkMode() { return "dark".equals(theme); }
+
+    public String getButtonHighlightColor() { return buttonHighlightColor; }
+    public void setButtonHighlightColor(String hex) { this.buttonHighlightColor = hex; }
+    public Color getButtonHighlightColorObj() { return Color.decode(buttonHighlightColor); }
+    public void setButtonHighlightColor(Color color) { this.buttonHighlightColor = String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue()); }
 
     public String getHighlightColor() { return highlightColor; }
     public void setHighlightColor(String hex) { this.highlightColor = hex; }
