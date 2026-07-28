@@ -39,10 +39,13 @@ public class PreferencesDialog extends JDialog {
     private final JComboBox<String> llmVendorCombo;
     private final JComboBox<String> llmModelCombo;
     private final JPasswordField llmApiKeyField;
+    private final JTextField llmEndpointField;
     private final JComboBox<String> aiFontCombo;
     private final JComboBox<Integer> aiFontSizeCombo;
     private final Color[] userPromptColor;
+    private final Color[] userTextColor;
     private final Color[] aiResponseColor;
+    private final Color[] aiTextColor;
     private boolean confirmed = false;
 
     private static final Integer[] FONT_SIZES = {8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36};
@@ -52,6 +55,7 @@ public class PreferencesDialog extends JDialog {
         {"Anthropic", "https://console.anthropic.com/settings/keys", "https://api.anthropic.com/v1"},
         {"Cerebras", "https://cloud.cerebras.ai", "https://api.cerebras.ai/v1"},
         {"DeepSeek", "https://platform.deepseek.com/api_keys", "https://api.deepseek.com/v1"},
+        {"Generic OpenAI API", "", ""},
         {"Google", "https://aistudio.google.com/apikey", "https://generativelanguage.googleapis.com/v1beta/openai"},
         {"Groq", "https://console.groq.com/keys", "https://api.groq.com/openai/v1"},
         {"Meta", "https://developer.meta.com/ai/", "https://api.meta.ai/v1"},
@@ -106,13 +110,17 @@ public class PreferencesDialog extends JDialog {
 
         llmApiKeyField = new JPasswordField(prefs.getLlmApiKey() != null ? prefs.getLlmApiKey() : "", 20);
 
+        llmEndpointField = new JTextField(prefs.getLlmEndpoint() != null ? prefs.getLlmEndpoint() : "", 20);
+
         aiFontCombo = new JComboBox<>(fontFamilies);
         aiFontCombo.setSelectedItem(prefs.getAiFontFamily());
         aiFontSizeCombo = new JComboBox<>(FONT_SIZES);
         aiFontSizeCombo.setSelectedItem(prefs.getAiFontSize());
 
         userPromptColor = new Color[]{prefs.getUserPromptColorObj()};
+        userTextColor = new Color[]{prefs.getUserTextColorObj()};
         aiResponseColor = new Color[]{prefs.getAiResponseColorObj()};
+        aiTextColor = new Color[]{prefs.getAiTextColorObj()};
 
         // === LEFT PANEL: Font Settings ===
         JPanel leftPanel = buildFontPanel();
@@ -142,9 +150,19 @@ public class PreferencesDialog extends JDialog {
         Runnable fetchModels = () -> {
             int vi = llmVendorCombo.getSelectedIndex();
             String apiKey = new String(llmApiKeyField.getPassword()).trim();
-            String baseUrl = VENDOR_DATA[vi][2];
+            String resolvedUrl = VENDOR_DATA[vi][2];
+            if ("Generic OpenAI API".equals(VENDOR_DATA[vi][0])) {
+                resolvedUrl = llmEndpointField.getText().trim();
+                if (resolvedUrl.isEmpty()) {
+                    llmModelCombo.removeAllItems();
+                    return;
+                }
+                // Strip trailing slash for consistency
+                if (resolvedUrl.endsWith("/")) resolvedUrl = resolvedUrl.substring(0, resolvedUrl.length() - 1);
+            }
+            final String baseUrl = resolvedUrl;
             llmModelCombo.removeAllItems();
-            if (apiKey.isEmpty() && !"Ollama".equals(VENDOR_DATA[vi][0])) {
+            if (apiKey.isEmpty() && !"Ollama".equals(VENDOR_DATA[vi][0]) && !"Generic OpenAI API".equals(VENDOR_DATA[vi][0])) {
                 return;
             }
             new Thread(() -> {
@@ -191,6 +209,16 @@ public class PreferencesDialog extends JDialog {
             fetchModels.run();
         });
         llmApiKeyField.getDocument().addDocumentListener(new DocumentListener() {
+            private final Timer debounce = new Timer(500, e -> {
+                llmModelCombo.removeAllItems();
+                fetchModels.run();
+            });
+            { debounce.setRepeats(false); }
+            public void insertUpdate(DocumentEvent e) { debounce.restart(); }
+            public void removeUpdate(DocumentEvent e) { debounce.restart(); }
+            public void changedUpdate(DocumentEvent e) { debounce.restart(); }
+        });
+        llmEndpointField.getDocument().addDocumentListener(new DocumentListener() {
             private final Timer debounce = new Timer(500, e -> {
                 llmModelCombo.removeAllItems();
                 fetchModels.run();
@@ -390,16 +418,41 @@ public class PreferencesDialog extends JDialog {
         gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
         panel.add(llmApiKeyField, gbc);
 
-        gbc.gridy = ++row; gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
+        JLabel endpointLabel = new JLabel("Endpoint:");
         JLabel apiKeyLink = new JLabel("<html><nobr><a href=''>Get API key...</a></nobr></html>");
+
+        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
+        panel.add(endpointLabel, gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(llmEndpointField, gbc);
+
+        // Show/hide endpoint based on vendor selection
+        boolean isGeneric = "Generic OpenAI API".equals(llmVendorCombo.getSelectedItem());
+        endpointLabel.setVisible(isGeneric);
+        llmEndpointField.setVisible(isGeneric);
+        apiKeyLink.setVisible(!isGeneric);
+
+        gbc.gridy = ++row; gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
         apiKeyLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         apiKeyLink.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent e) {
-                try { Desktop.getDesktop().browse(URI.create(VENDOR_DATA[llmVendorCombo.getSelectedIndex()][1])); }
-                catch (Exception ignored) {}
+                int vi = llmVendorCombo.getSelectedIndex();
+                String url = VENDOR_DATA[vi][1];
+                if (!url.isEmpty()) {
+                    try { Desktop.getDesktop().browse(URI.create(url)); }
+                    catch (Exception ignored) {}
+                }
             }
         });
         panel.add(apiKeyLink, gbc);
+
+        // Update endpoint/link visibility when vendor changes
+        llmVendorCombo.addActionListener(e -> {
+            boolean generic = "Generic OpenAI API".equals(llmVendorCombo.getSelectedItem());
+            endpointLabel.setVisible(generic);
+            llmEndpointField.setVisible(generic);
+            apiKeyLink.setVisible(!generic);
+        });
 
         // Separator
         gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
@@ -426,6 +479,8 @@ public class PreferencesDialog extends JDialog {
 
         gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
         panel.add(new JLabel("User Color:"), gbc);
+        JPanel userColorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        userColorPanel.setOpaque(false);
         JPanel userSwatch = new JPanel();
         userSwatch.setBackground(userPromptColor[0]);
         userSwatch.setPreferredSize(new Dimension(60, 24));
@@ -437,11 +492,27 @@ public class PreferencesDialog extends JDialog {
                 if (c != null) { userPromptColor[0] = c; userSwatch.setBackground(c); }
             }
         });
+        userColorPanel.add(userSwatch);
+        userColorPanel.add(new JLabel("Text:"));
+        JPanel userTextSwatch = new JPanel();
+        userTextSwatch.setBackground(userTextColor[0]);
+        userTextSwatch.setPreferredSize(new Dimension(60, 24));
+        userTextSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
+        userTextSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        userTextSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                Color c = JColorChooser.showDialog(PreferencesDialog.this, "User Text Color", userTextColor[0]);
+                if (c != null) { userTextColor[0] = c; userTextSwatch.setBackground(c); }
+            }
+        });
+        userColorPanel.add(userTextSwatch);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
-        panel.add(userSwatch, gbc);
+        panel.add(userColorPanel, gbc);
 
         gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
         panel.add(new JLabel("AI Color:"), gbc);
+        JPanel aiColorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        aiColorPanel.setOpaque(false);
         JPanel aiSwatch = new JPanel();
         aiSwatch.setBackground(aiResponseColor[0]);
         aiSwatch.setPreferredSize(new Dimension(60, 24));
@@ -453,8 +524,22 @@ public class PreferencesDialog extends JDialog {
                 if (c != null) { aiResponseColor[0] = c; aiSwatch.setBackground(c); }
             }
         });
+        aiColorPanel.add(aiSwatch);
+        aiColorPanel.add(new JLabel("Text:"));
+        JPanel aiTextSwatch = new JPanel();
+        aiTextSwatch.setBackground(aiTextColor[0]);
+        aiTextSwatch.setPreferredSize(new Dimension(60, 24));
+        aiTextSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
+        aiTextSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        aiTextSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                Color c = JColorChooser.showDialog(PreferencesDialog.this, "AI Text Color", aiTextColor[0]);
+                if (c != null) { aiTextColor[0] = c; aiTextSwatch.setBackground(c); }
+            }
+        });
+        aiColorPanel.add(aiTextSwatch);
         gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
-        panel.add(aiSwatch, gbc);
+        panel.add(aiColorPanel, gbc);
 
         // Vertical glue to push content to top
         gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 1;
@@ -483,9 +568,13 @@ public class PreferencesDialog extends JDialog {
         prefs.setLlmModel(modelItem != null ? modelItem.toString() : null);
         String key = new String(llmApiKeyField.getPassword()).trim();
         prefs.setLlmApiKey(key.isEmpty() ? null : key);
+        String endpoint = llmEndpointField.getText().trim();
+        prefs.setLlmEndpoint(endpoint.isEmpty() ? null : endpoint);
         prefs.setAiFontFamily((String) aiFontCombo.getSelectedItem());
         prefs.setAiFontSize((Integer) aiFontSizeCombo.getSelectedItem());
         prefs.setUserPromptColor(userPromptColor[0]);
+        prefs.setUserTextColor(userTextColor[0]);
         prefs.setAiResponseColor(aiResponseColor[0]);
+        prefs.setAiTextColor(aiTextColor[0]);
     }
 }

@@ -304,7 +304,7 @@ public class AIChatPanel extends JPanel {
 
         JTextArea msg = new JTextArea(text);
         msg.setFont(new Font(preferences.getAiFontFamily(), Font.PLAIN, preferences.getAiFontSize()));
-        msg.setForeground(textColorForBackground(uColor));
+        msg.setForeground(preferences.getUserTextColorObj());
         msg.setOpaque(false);
         msg.setEditable(false);
         msg.setLineWrap(true);
@@ -345,7 +345,7 @@ public class AIChatPanel extends JPanel {
         msg.setOpaque(false);
         msg.setEditable(false);
         msg.setFont(new Font(preferences.getAiFontFamily(), Font.PLAIN, preferences.getAiFontSize()));
-        msg.setForeground(textColorForBackground(aiColor));
+        msg.setForeground(preferences.getAiTextColorObj());
         renderStyledMessage(msg, text);
         bubble.add(msg, BorderLayout.CENTER);
 
@@ -544,6 +544,12 @@ public class AIChatPanel extends JPanel {
             case "Anthropic" -> "https://api.anthropic.com/v1";
             case "Cerebras" -> "https://api.cerebras.ai/v1";
             case "DeepSeek" -> "https://api.deepseek.com/v1";
+            case "Generic OpenAI API" -> {
+                String ep = preferences.getLlmEndpoint();
+                if (ep == null || ep.isBlank()) throw new RuntimeException("No endpoint configured for Generic OpenAI API");
+                if (ep.endsWith("/")) ep = ep.substring(0, ep.length() - 1);
+                yield ep;
+            }
             case "Google" -> "https://generativelanguage.googleapis.com/v1beta/openai";
             case "Groq" -> "https://api.groq.com/openai/v1";
             case "Meta" -> "https://api.meta.ai/v1";

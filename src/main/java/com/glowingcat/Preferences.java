@@ -81,6 +81,9 @@ public class Preferences {
     /** LLM API key (null means not configured). */
     private String llmApiKey = null;
 
+    /** Custom LLM endpoint URL for Generic OpenAI API vendor. */
+    private String llmEndpoint = null;
+
     /** Font family for the AI chat panel. */
     private String aiFontFamily = detectAIFont();
 
@@ -90,8 +93,14 @@ public class Preferences {
     /** Background color for user prompt chat bubbles (hex string for Gson). */
     private String userPromptColor = "#ffcc33";
 
+    /** Text color for user prompt chat bubbles (hex string for Gson). */
+    private String userTextColor = "#000000";
+
     /** Background color for AI response chat bubbles (hex string for Gson). */
     private String aiResponseColor = "#c8823c";
+
+    /** Text color for AI response chat bubbles (hex string for Gson). */
+    private String aiTextColor = "#FFFFFF";
 
     // --- Window state (not shown in preferences dialog) ---
 
@@ -171,6 +180,8 @@ public class Preferences {
     public void setLlmModel(String llmModel) { this.llmModel = llmModel; }
     public String getLlmApiKey() { return llmApiKey; }
     public void setLlmApiKey(String llmApiKey) { this.llmApiKey = llmApiKey; }
+    public String getLlmEndpoint() { return llmEndpoint; }
+    public void setLlmEndpoint(String llmEndpoint) { this.llmEndpoint = llmEndpoint; }
     public String getAiFontFamily() { return aiFontFamily; }
     public void setAiFontFamily(String aiFontFamily) { this.aiFontFamily = aiFontFamily; }
     public int getAiFontSize() { return aiFontSize; }
@@ -181,10 +192,20 @@ public class Preferences {
     public String getUserPromptColor() { return userPromptColor; }
     public void setUserPromptColor(String hex) { this.userPromptColor = hex; }
 
+    public Color getUserTextColorObj() { return Color.decode(userTextColor); }
+    public void setUserTextColor(Color color) { this.userTextColor = String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue()); }
+    public String getUserTextColor() { return userTextColor; }
+    public void setUserTextColor(String hex) { this.userTextColor = hex; }
+
     public Color getAiResponseColorObj() { return Color.decode(aiResponseColor); }
     public void setAiResponseColor(Color color) { this.aiResponseColor = String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue()); }
     public String getAiResponseColor() { return aiResponseColor; }
     public void setAiResponseColor(String hex) { this.aiResponseColor = hex; }
+
+    public Color getAiTextColorObj() { return Color.decode(aiTextColor); }
+    public void setAiTextColor(Color color) { this.aiTextColor = String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue()); }
+    public String getAiTextColor() { return aiTextColor; }
+    public void setAiTextColor(String hex) { this.aiTextColor = hex; }
 
     public String getEditorFontFamily() { return editorFontFamily; }
     public void setEditorFontFamily(String editorFontFamily) { this.editorFontFamily = editorFontFamily; }
