@@ -1108,7 +1108,12 @@ public class EditorWindow {
         fd.setVisible(true);
         if (fd.getFile() != null) {
             File file = new File(fd.getDirectory(), fd.getFile());
-            openHtmlFile(file);
+            // If this window already has an HTML file open, open in a new window
+            if (htmlFile != null) {
+                openFileInWindow(file);
+            } else {
+                openHtmlFile(file);
+            }
         }
     }
 
