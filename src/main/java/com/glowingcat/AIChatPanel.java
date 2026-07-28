@@ -27,6 +27,7 @@ public class AIChatPanel extends JPanel {
     private final JScrollPane chatScroll;
     private final JTextArea inputArea;
     private final JButton sendBtn;
+    private final JButton clearBtn;
     private final Supplier<RSyntaxTextArea> editorSupplier;
     private final Preferences preferences;
     private final List<Map<String, String>> messages = new ArrayList<>();
@@ -95,7 +96,25 @@ public class AIChatPanel extends JPanel {
         inputScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
         sendBtn = new JButton("Send");
-        JButton clearBtn = new JButton("Clear");
+        clearBtn = new JButton("Clear");
+        // Style buttons with border and click highlight
+        for (JButton btn : new JButton[]{sendBtn, clearBtn}) {
+            btn.setUI(new javax.swing.plaf.basic.BasicButtonUI());
+            btn.setOpaque(true);
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Color.GRAY),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+            btn.setFocusPainted(false);
+            // Highlight on press with user-defined button color
+            btn.getModel().addChangeListener(e -> {
+                if (btn.getModel().isPressed()) {
+                    btn.setBackground(preferences.getButtonHighlightColorObj());
+                } else {
+                    Color bg = preferences.isDarkMode() ? new Color(70, 70, 70) : UIManager.getColor("Button.background");
+                    btn.setBackground(bg);
+                }
+            });
+        }
         JPanel btnPanel = new JPanel(new GridLayout(2, 1, 0, 2));
         btnPanel.add(sendBtn);
         btnPanel.add(clearBtn);
@@ -152,6 +171,7 @@ public class AIChatPanel extends JPanel {
         Color fg = dark ? new Color(187, 187, 187) : Color.BLACK;
         Color btnBg = dark ? new Color(70, 70, 70) : UIManager.getColor("Button.background");
         Color btnFg = dark ? new Color(220, 220, 220) : UIManager.getColor("Button.foreground");
+        Color borderColor = dark ? new Color(100, 100, 100) : Color.GRAY;
 
         setBackground(bg);
         chatPanel.setBackground(chatBg);
@@ -160,8 +180,17 @@ public class AIChatPanel extends JPanel {
         inputArea.setBackground(inputBg);
         inputArea.setForeground(fg);
         inputArea.setCaretColor(fg);
-        sendBtn.setBackground(btnBg);
-        sendBtn.setForeground(btnFg);
+
+        // Style Send and Clear buttons
+        for (JButton btn : new JButton[]{sendBtn, clearBtn}) {
+            btn.setUI(new javax.swing.plaf.basic.BasicButtonUI());
+            btn.setBackground(btnBg);
+            btn.setForeground(btnFg);
+            btn.setOpaque(true);
+            btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(borderColor),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+        }
 
         // Update the border
         setBorder(BorderFactory.createTitledBorder(
