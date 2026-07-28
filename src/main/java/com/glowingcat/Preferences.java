@@ -55,6 +55,9 @@ public class Preferences {
 
     // --- Editor settings ---
 
+    /** UI theme: "light" or "dark". */
+    private String theme = "light";
+
     /** Editor highlight/caret line color (hex string). */
     private String highlightColor = "#E8F2FE";
 
@@ -194,6 +197,10 @@ public class Preferences {
     public void setPreviewCodeFontSize(int previewCodeFontSize) { this.previewCodeFontSize = previewCodeFontSize; }
 
     // --- Editor settings getters/setters ---
+
+    public String getTheme() { return theme; }
+    public void setTheme(String theme) { this.theme = theme; }
+    public boolean isDarkMode() { return "dark".equals(theme); }
 
     public String getHighlightColor() { return highlightColor; }
     public void setHighlightColor(String hex) { this.highlightColor = hex; }

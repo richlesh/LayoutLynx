@@ -153,6 +153,9 @@ public class EditorWindow {
         // Create an initial empty CSS tab
         createNewTab("Untitled.css", SyntaxConstants.SYNTAX_STYLE_CSS, null);
 
+        // Apply initial theme
+        applyPreferences();
+
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
         frame.toFront();
@@ -1489,13 +1492,72 @@ public class EditorWindow {
     }
 
     private void applyPreferences() {
+        boolean dark = preferences.isDarkMode();
+
+        // Apply theme to editor text areas
         for (TabInfo tab : openTabs.values()) {
             tab.textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
             tab.textArea.setTabSize(preferences.getTabSize());
             tab.textArea.setTabsEmulated(!preferences.isUseTabs());
             tab.textArea.setSelectionColor(preferences.getHighlightColorObj());
+            applyEditorTheme(tab.textArea, dark);
         }
+
+        // Apply theme to UI chrome
+        Color bgColor = dark ? new Color(43, 43, 43) : UIManager.getColor("Panel.background");
+        Color fgColor = dark ? new Color(187, 187, 187) : UIManager.getColor("Panel.foreground");
+        Color borderColor = dark ? new Color(60, 60, 60) : Color.LIGHT_GRAY;
+
+        frame.getContentPane().setBackground(bgColor);
+        if (fileTree != null) {
+            fileTree.setBackground(dark ? new Color(50, 50, 50) : Color.WHITE);
+            fileTree.setForeground(fgColor);
+        }
+        if (editorTabs != null) {
+            editorTabs.setBackground(bgColor);
+            editorTabs.setForeground(fgColor);
+        }
+        if (filePathLabel != null) {
+            filePathLabel.setForeground(fgColor);
+        }
+
         if (aiChatPanel != null) aiChatPanel.updateFont();
+        frame.repaint();
+    }
+
+    /**
+     * Applies light or dark theme to an RSyntaxTextArea.
+     */
+    private void applyEditorTheme(RSyntaxTextArea textArea, boolean dark) {
+        if (dark) {
+            try {
+                org.fife.ui.rsyntaxtextarea.Theme theme =
+                    org.fife.ui.rsyntaxtextarea.Theme.load(
+                        getClass().getResourceAsStream("/org/fife/ui/rsyntaxtextarea/themes/dark.xml"));
+                theme.apply(textArea);
+            } catch (Exception e) {
+                // Fallback: manually set dark colors
+                textArea.setBackground(new Color(43, 43, 43));
+                textArea.setForeground(new Color(187, 187, 187));
+                textArea.setCurrentLineHighlightColor(new Color(50, 50, 50));
+                textArea.setCaretColor(Color.WHITE);
+            }
+        } else {
+            try {
+                org.fife.ui.rsyntaxtextarea.Theme theme =
+                    org.fife.ui.rsyntaxtextarea.Theme.load(
+                        getClass().getResourceAsStream("/org/fife/ui/rsyntaxtextarea/themes/default.xml"));
+                theme.apply(textArea);
+            } catch (Exception e) {
+                // Fallback: standard light colors
+                textArea.setBackground(Color.WHITE);
+                textArea.setForeground(Color.BLACK);
+                textArea.setCurrentLineHighlightColor(new Color(232, 242, 254));
+                textArea.setCaretColor(Color.BLACK);
+            }
+        }
+        // Re-apply user's font after theme (theme may override it)
+        textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
     }
 
     private void convertTabsToSpaces() {

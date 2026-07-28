@@ -27,6 +27,7 @@ public class PreferencesDialog extends JDialog {
 
     private final JComboBox<String> editorFontCombo;
     private final JComboBox<Integer> editorSizeCombo;
+    private final JComboBox<String> themeCombo;
     private final JComboBox<String> previewFontCombo;
     private final JComboBox<Integer> previewSizeCombo;
     private final JComboBox<String> previewCodeFontCombo;
@@ -72,6 +73,10 @@ public class PreferencesDialog extends JDialog {
         editorFontCombo.setSelectedItem(prefs.getEditorFontFamily());
         editorSizeCombo = new JComboBox<>(FONT_SIZES);
         editorSizeCombo.setSelectedItem(prefs.getEditorFontSize());
+
+        // Initialize theme combo
+        themeCombo = new JComboBox<>(new String[]{"Light", "Dark"});
+        themeCombo.setSelectedItem(prefs.isDarkMode() ? "Dark" : "Light");
 
         previewFontCombo = new JComboBox<>(fontFamilies);
         previewFontCombo.setSelectedItem(prefs.getPreviewFontFamily());
@@ -310,6 +315,24 @@ public class PreferencesDialog extends JDialog {
         gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
         panel.add(tabSizeSpinner, gbc);
 
+        // Separator
+        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(10, 6, 10, 6);
+        panel.add(new JSeparator(), gbc);
+        gbc.insets = new Insets(4, 6, 4, 6);
+
+        // Appearance section
+        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2;
+        JLabel themeHeader = new JLabel("Appearance");
+        themeHeader.setFont(themeHeader.getFont().deriveFont(Font.BOLD));
+        panel.add(themeHeader, gbc);
+
+        gbc.gridwidth = 1;
+        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
+        panel.add(new JLabel("Theme:"), gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(themeCombo, gbc);
+
         // Vertical glue to push content to top
         gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 1;
         gbc.fill = GridBagConstraints.VERTICAL;
@@ -428,6 +451,7 @@ public class PreferencesDialog extends JDialog {
     public void applyTo(Preferences prefs) {
         prefs.setEditorFontFamily((String) editorFontCombo.getSelectedItem());
         prefs.setEditorFontSize((Integer) editorSizeCombo.getSelectedItem());
+        prefs.setTheme("Dark".equals(themeCombo.getSelectedItem()) ? "dark" : "light");
         prefs.setPreviewFontFamily((String) previewFontCombo.getSelectedItem());
         prefs.setPreviewFontSize((Integer) previewSizeCombo.getSelectedItem());
         prefs.setPreviewCodeFontFamily((String) previewCodeFontCombo.getSelectedItem());
