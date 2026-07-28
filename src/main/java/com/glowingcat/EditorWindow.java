@@ -1675,6 +1675,8 @@ public class EditorWindow {
 
         // Re-apply to responsive breakpoint buttons
         if (previewPanel != null) {
+            Color selectedColor = new Color(218, 165, 32); // Gold highlight matching toolbar
+            Color unselectedBg = dark ? new Color(60, 60, 60) : UIManager.getColor("Button.background");
             for (Component c : previewPanel.getComponents()) {
                 if (c instanceof JPanel) {
                     for (Component cc : ((JPanel) c).getComponents()) {
@@ -1683,10 +1685,15 @@ public class EditorWindow {
                             btn.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
                             btn.setForeground(fgColor);
                             btn.setOpaque(true);
-                            if (!btn.isSelected()) {
-                                btn.setBackground(dark ? new Color(60, 60, 60) : UIManager.getColor("Button.background"));
-                                btn.setContentAreaFilled(true);
+                            btn.setContentAreaFilled(true);
+                            btn.setBackground(btn.isSelected() ? selectedColor : unselectedBg);
+                            // Store colors for dynamic update and remove old item listeners
+                            for (ItemListener il : btn.getItemListeners()) {
+                                if (il.getClass().isAnonymousClass()) btn.removeItemListener(il);
                             }
+                            btn.addItemListener(e -> {
+                                btn.setBackground(btn.isSelected() ? selectedColor : unselectedBg);
+                            });
                         }
                     }
                 }
