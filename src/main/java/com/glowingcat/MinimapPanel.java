@@ -126,13 +126,19 @@ class MinimapPanel extends JPanel {
             int textHeight = textArea.getHeight();
 
             if (textHeight > 0) {
-                float scale = (float) Math.min(docHeight, height) / textHeight;
+                // Scale the viewport indicator to match the minimap's rendering.
+                // The minimap renders totalLines * LINE_HEIGHT pixels of content.
+                int renderedHeight = Math.min(docHeight, height);
+                float scale = (float) renderedHeight / textHeight;
                 int indicatorY = (int) (viewY * scale);
-                int indicatorH = Math.max(10, (int) (viewH * scale));
+                int indicatorH = Math.max(12, (int) (viewH * scale));
+                // Clamp to panel bounds
+                indicatorY = Math.min(indicatorY, height - indicatorH);
+                indicatorY = Math.max(0, indicatorY);
 
-                g2.setColor(dark ? new Color(255, 255, 255, 30) : new Color(0, 0, 0, 20));
+                g2.setColor(dark ? new Color(255, 255, 255, 40) : new Color(0, 0, 0, 30));
                 g2.fillRect(0, indicatorY, width, indicatorH);
-                g2.setColor(dark ? new Color(255, 255, 255, 60) : new Color(0, 0, 0, 40));
+                g2.setColor(dark ? new Color(255, 255, 255, 80) : new Color(0, 0, 0, 60));
                 g2.drawRect(0, indicatorY, width - 1, indicatorH);
             }
         }

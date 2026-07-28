@@ -621,10 +621,16 @@ public class EditorWindow {
         fileTree.setRootVisible(true);
         fileTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         // Use document icon for all nodes (no folder icons)
-        javax.swing.tree.DefaultTreeCellRenderer treeRenderer = new javax.swing.tree.DefaultTreeCellRenderer();
-        Icon docIcon = treeRenderer.getLeafIcon();
-        treeRenderer.setOpenIcon(docIcon);
-        treeRenderer.setClosedIcon(docIcon);
+        javax.swing.tree.DefaultTreeCellRenderer treeRenderer = new javax.swing.tree.DefaultTreeCellRenderer() {
+            @Override
+            public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel,
+                    boolean expanded, boolean leaf, int row, boolean hasFocus) {
+                super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+                // Always use the leaf (document) icon regardless of whether the node has children
+                setIcon(getLeafIcon());
+                return this;
+            }
+        };
         fileTree.setCellRenderer(treeRenderer);
         fileTree.addTreeSelectionListener(e -> {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) fileTree.getLastSelectedPathComponent();
