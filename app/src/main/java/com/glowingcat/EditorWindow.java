@@ -7,6 +7,12 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
+import com.glowingcat.aichat.AIChatPanel;
+import com.glowingcat.aichat.AIChatPreferences;
+import com.glowingcat.aichat.AIChatPreferencesDialog;
+import com.glowingcat.aichat.ChatColors;
+import com.glowingcat.aichat.LLMClientFactory;
+
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -44,6 +50,7 @@ public class EditorWindow {
     private final JTabbedPane editorTabs;
     private final PreviewPanel previewPanel;
     private AIChatPanel aiChatPanel;
+    private AIChatPreferences aiPreferences;
     private JTree fileTree;
     private DefaultTreeModel treeModel;
     private DefaultMutableTreeNode rootNode;
@@ -200,6 +207,8 @@ public class EditorWindow {
             aboutItem.addActionListener(e -> showAboutDialog());
             JMenuItem prefsItem = new JMenuItem("Settings...");
             prefsItem.addActionListener(e -> showPreferencesDialog());
+            JMenuItem aiSettingsItem = new JMenuItem("AI Settings...");
+            aiSettingsItem.addActionListener(e -> showAiSettingsDialog());
             JMenuItem licenseItem = new JMenuItem("License Key...");
             licenseItem.addActionListener(e -> showLicenseDialog());
             JMenuItem quitItem = new JMenuItem("Quit LayoutLynx");
@@ -208,6 +217,7 @@ public class EditorWindow {
             appMenu.add(aboutItem);
             appMenu.addSeparator();
             appMenu.add(prefsItem);
+            appMenu.add(aiSettingsItem);
             appMenu.add(licenseItem);
             appMenu.addSeparator();
             appMenu.add(quitItem);
@@ -325,6 +335,12 @@ public class EditorWindow {
         tidyItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_T, shortcutMask | KeyEvent.SHIFT_DOWN_MASK));
         tidyItem.addActionListener(e -> tidyDocument());
         editMenu.add(tidyItem);
+        if (isMac) {
+            editMenu.addSeparator();
+            JMenuItem aiSettingsMenuItem = new JMenuItem("AI Settings...");
+            aiSettingsMenuItem.addActionListener(e -> showAiSettingsDialog());
+            editMenu.add(aiSettingsMenuItem);
+        }
         menuBar.add(editMenu);
 
         // --- Search menu ---
@@ -660,7 +676,33 @@ public class EditorWindow {
         editorPreviewSplit.setResizeWeight(0.5);
 
         // --- Split: (Tree+Editor+Preview) | AI ---
-        aiChatPanel = new AIChatPanel(this::getActiveTextArea, preferences);
+        aiPreferences = AIChatPreferences.load();
+        aiChatPanel = AIChatPanel.builder()
+            .editor(new com.glowingcat.aichat.DocumentEditor() {
+                @Override public String getText() {
+                    RSyntaxTextArea ta = getActiveTextArea();
+                    return ta != null ? ta.getText() : "";
+                }
+                @Override public void setText(String text) {
+                    RSyntaxTextArea ta = getActiveTextArea();
+                    if (ta != null) {
+                        ta.setText(text);
+                        ta.setCaretPosition(0);
+                    }
+                }
+            })
+            .preferences(aiPreferences)
+            .chatColors(new ChatColors() {
+                @Override public String getUserPromptColor() { return preferences.getUserPromptColor(); }
+                @Override public String getUserTextColor() { return preferences.getUserTextColor(); }
+                @Override public String getAiResponseColor() { return preferences.getAiResponseColor(); }
+                @Override public String getAiTextColor() { return preferences.getAiTextColor(); }
+            })
+            .llmClient(LLMClientFactory.create(aiPreferences))
+            .onPromptNag(() -> {
+                if (!LicenseDialog.isLicensed(preferences)) SplashScreen.show();
+            })
+            .build();
         mainSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, editorPreviewSplit, aiChatPanel);
         mainSplit.setResizeWeight(1.0);
         mainSplit.setDividerLocation(frame.getWidth() - 380);
@@ -1455,6 +1497,32 @@ public class EditorWindow {
         }
     }
 
+    void showAiSettingsDialog() {
+        ChatColors currentColors = new ChatColors() {
+            @Override public String getUserPromptColor() { return preferences.getUserPromptColor(); }
+            @Override public String getUserTextColor() { return preferences.getUserTextColor(); }
+            @Override public String getAiResponseColor() { return preferences.getAiResponseColor(); }
+            @Override public String getAiTextColor() { return preferences.getAiTextColor(); }
+        };
+        AIChatPreferencesDialog dialog = new AIChatPreferencesDialog(frame, aiPreferences, currentColors);
+        dialog.setVisible(true);
+        if (dialog.isConfirmed()) {
+            dialog.applyTo(aiPreferences);
+            aiPreferences.save();
+            // Save colors to app preferences
+            preferences.setUserPromptColor(dialog.getSelectedUserPromptColor());
+            preferences.setUserTextColor(dialog.getSelectedUserTextColor());
+            preferences.setAiResponseColor(dialog.getSelectedAiResponseColor());
+            preferences.setAiTextColor(dialog.getSelectedAiTextColor());
+            preferences.save();
+            if (aiChatPanel != null) {
+                aiChatPanel.setLlmClient(LLMClientFactory.create(aiPreferences));
+                aiChatPanel.updateFont();
+                aiChatPanel.setChatColors(currentColors);
+            }
+        }
+    }
+
     void showLicenseDialog() {
         LicenseDialog.show(frame, preferences);
     }
@@ -1665,7 +1733,6 @@ public class EditorWindow {
 
         // AI chat panel
         if (aiChatPanel != null) {
-            aiChatPanel.applyTheme(dark);
             aiChatPanel.updateFont();
         }
 
@@ -1750,11 +1817,6 @@ public class EditorWindow {
                     }
                 }
             }
-        }
-
-        // Re-apply to AI panel buttons
-        if (aiChatPanel != null) {
-            aiChatPanel.applyTheme(dark);
         }
 
         frame.repaint();

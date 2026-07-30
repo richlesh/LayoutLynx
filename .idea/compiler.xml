@@ -9,7 +9,8 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="LayoutLynx" />
+        <module name="aichat" />
+        <module name="app" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel target="17" />
