@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. 1.0.0)'
+        description: 'Release version tag (e.g. 1.1.0)'
         required: true
 
 permissions:
@@ -23,37 +23,37 @@ jobs:
         include:
           - os: macos-latest
             arch: arm64
-            icon: src/main/resources/app_icon.icns
+            icon: app/src/main/resources/app_icon.icns
             pkg_type: dmg
             label: macos-arm64
           - os: windows-latest
             arch: x64
-            icon: src/main/resources/app_icon.ico
+            icon: app/src/main/resources/app_icon.ico
             pkg_type: msi
             label: windows-x64
           - os: windows-11-arm
             arch: arm64
-            icon: src/main/resources/app_icon.ico
+            icon: app/src/main/resources/app_icon.ico
             pkg_type: msi
             label: windows-arm64
           - os: ubuntu-22.04
             arch: x64
-            icon: src/main/resources/app_icon_256.png
+            icon: app/src/main/resources/app_icon_256.png
             pkg_type: deb
             label: linux-x64-deb
           - os: ubuntu-22.04
             arch: x64
-            icon: src/main/resources/app_icon_256.png
+            icon: app/src/main/resources/app_icon_256.png
             pkg_type: rpm
             label: linux-x64-rpm
           - os: ubuntu-24.04-arm
             arch: arm64
-            icon: src/main/resources/app_icon_256.png
+            icon: app/src/main/resources/app_icon_256.png
             pkg_type: deb
             label: linux-arm64-deb
           - os: ubuntu-24.04-arm
             arch: arm64
-            icon: src/main/resources/app_icon_256.png
+            icon: app/src/main/resources/app_icon_256.png
             pkg_type: rpm
             label: linux-arm64-rpm
 
@@ -97,7 +97,7 @@ jobs:
         env:
           LICENSE_SALT: ${{ secrets.LICENSE_SALT }}
         run: |
-          cat > src/main/java/com/glowingcat/License.java <<EOF
+          cat > app/src/main/java/com/glowingcat/License.java <<EOF
           /*
            * (c) 2026 Glowing Cat Software
            */
@@ -119,7 +119,7 @@ jobs:
           fi
           mvn clean package -DskipTests=true $MAVEN_OPTS
           mkdir -p lib
-          cp target/LayoutLynx-*.jar lib/
+          cp app/target/LayoutLynx-*.jar lib/
           # Determine the actual jar filename for jpackage
           JARFILE=$(ls lib/LayoutLynx-*.jar | head -1 | xargs basename)
           echo "JARFILE=$JARFILE" >> $GITHUB_ENV
@@ -270,7 +270,7 @@ jobs:
           mkdir -p "$DMG_DIR"
           cp -R LayoutLynx.app "$DMG_DIR/"
           ln -s /Applications "$DMG_DIR/Applications"
-          cp src/main/resources/app_icon.icns "$DMG_DIR/.VolumeIcon.icns"
+          cp app/src/main/resources/app_icon.icns "$DMG_DIR/.VolumeIcon.icns"
 
           hdiutil create -volname LayoutLynx -srcfolder "$DMG_DIR" -ov -format UDRW /tmp/layoutlynx-rw.dmg
           hdiutil attach /tmp/layoutlynx-rw.dmg -mountpoint /tmp/dmg-vol
@@ -375,7 +375,7 @@ jobs:
         env:
           LICENSE_SALT: ${{ secrets.LICENSE_SALT }}
         run: |
-          cat > src/main/java/com/glowingcat/License.java <<EOF
+          cat > app/src/main/java/com/glowingcat/License.java <<EOF
           /*
            * (c) 2026 Glowing Cat Software
            */
@@ -390,7 +390,7 @@ jobs:
         run: |
           mvn clean package -DskipTests=true -Pexclude-javafx
           mkdir -p staging
-          cp target/LayoutLynx-*.jar staging/LayoutLynx.jar
+          cp app/target/LayoutLynx-*.jar staging/LayoutLynx.jar
 
       - name: Download JavaFX platform JARs
         run: |

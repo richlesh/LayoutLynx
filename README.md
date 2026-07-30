@@ -1,6 +1,6 @@
 ![app_icon_256](app/src/main/resources/app_icon_256.png)
 
-# LayoutLynx
+# LayoutLynx 1.1.0
 
 A lightweight HTML/CSS editor with a live preview pane, built for rapid front-end prototyping and learning.
 
