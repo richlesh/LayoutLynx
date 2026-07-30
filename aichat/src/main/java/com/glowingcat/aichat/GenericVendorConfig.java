@@ -16,7 +16,7 @@ import java.util.regex.*;
 
 /**
  * Manages a Generic vendor YAML configuration for custom LLM API endpoints.
- * The YAML is stored at ~/.purpleplatypus-generic.yml and defines how to
+ * The YAML is stored at ~/.glowingcat-generic.yml and defines how to
  * call a chat/prompt API and a models-listing API with configurable request
  * format, headers, and response parsing via JSONPath-like expressions.
  *
@@ -26,7 +26,7 @@ import java.util.regex.*;
  */
 public class GenericVendorConfig {
 
-    private static final String CONFIG_FILENAME = ".purpleplatypus-generic.yml";
+    private static final String CONFIG_FILENAME = ".glowingcat-generic.yml";
     private static final Path CONFIG_PATH = Paths.get(System.getProperty("user.home"), CONFIG_FILENAME);
 
     // Parsed config sections

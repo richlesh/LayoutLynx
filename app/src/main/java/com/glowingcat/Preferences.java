@@ -57,10 +57,10 @@ public class Preferences {
     private String theme = "light";
 
     /** Button highlight color (hex string). */
-    private String buttonHighlightColor = "#DAA520";
+    private String buttonHighlightColor = "#F4D747";    // HSV(50,70,95)
 
     /** Editor highlight/caret line color (hex string). */
-    private String highlightColor = "#E8F2FE";
+    private String highlightColor = "#F4D747";          // HSV(50,70,95)
 
     /** Whether to use real tabs (true) or spaces (false). */
     private boolean useTabs = false;
@@ -71,16 +71,16 @@ public class Preferences {
     // --- AI Chat color settings (stored in app prefs, passed to aichat module via ChatColors) ---
 
     /** Background color for user prompt chat bubbles (hex string for Gson). */
-    private String userPromptColor = "#ffcc33";
+    private String userPromptColor = "#F4D747";          // HSV(50,70,95)
 
     /** Text color for user prompt chat bubbles (hex string for Gson). */
-    private String userTextColor = "#000000";
+    private String userTextColor = "#333333";           // HSV(0,0,20)
 
     /** Background color for AI response chat bubbles (hex string for Gson). */
-    private String aiResponseColor = "#c8823c";
+    private String aiResponseColor = "#C8823C";         // HSV(30,70,78)
 
     /** Text color for AI response chat bubbles (hex string for Gson). */
-    private String aiTextColor = "#FFFFFF";
+    private String aiTextColor = "#FFFFFF";             // HSV(0,0,100)
 
     // --- Window state (not shown in preferences dialog) ---
 
