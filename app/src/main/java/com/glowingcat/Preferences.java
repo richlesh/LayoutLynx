@@ -15,8 +15,6 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
 import java.awt.Color;
-import java.awt.Font;
-import java.awt.GraphicsEnvironment;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -59,10 +57,10 @@ public class Preferences {
     private String theme = "light";
 
     /** Button highlight color (hex string). */
-    private String buttonHighlightColor = "#DAA520";
+    private String buttonHighlightColor = "#F4D747";    // HSV(50,70,95)
 
     /** Editor highlight/caret line color (hex string). */
-    private String highlightColor = "#E8F2FE";
+    private String highlightColor = "#F4D747";          // HSV(50,70,95)
 
     /** Whether to use real tabs (true) or spaces (false). */
     private boolean useTabs = false;
@@ -70,37 +68,19 @@ public class Preferences {
     /** Number of spaces per tab stop. */
     private int tabSize = 4;
 
-    // --- LLM / AI Chat settings ---
-
-    /** LLM vendor name (OpenAI, Anthropic, Google, DeepSeek, Alibaba, Ollama). */
-    private String llmVendor = "OpenAI";
-
-    /** LLM model identifier. */
-    private String llmModel = "gpt-4o";
-
-    /** LLM API key (null means not configured). */
-    private String llmApiKey = null;
-
-    /** Custom LLM endpoint URL for Generic OpenAI API vendor. */
-    private String llmEndpoint = null;
-
-    /** Font family for the AI chat panel. */
-    private String aiFontFamily = detectAIFont();
-
-    /** Font size for the AI chat panel. */
-    private int aiFontSize = 14;
+    // --- AI Chat color settings (stored in app prefs, passed to aichat module via ChatColors) ---
 
     /** Background color for user prompt chat bubbles (hex string for Gson). */
-    private String userPromptColor = "#ffcc33";
+    private String userPromptColor = "#F4D747";          // HSV(50,70,95)
 
     /** Text color for user prompt chat bubbles (hex string for Gson). */
-    private String userTextColor = "#000000";
+    private String userTextColor = "#333333";           // HSV(0,0,20)
 
     /** Background color for AI response chat bubbles (hex string for Gson). */
-    private String aiResponseColor = "#c8823c";
+    private String aiResponseColor = "#C8823C";         // HSV(30,70,78)
 
     /** Text color for AI response chat bubbles (hex string for Gson). */
-    private String aiTextColor = "#FFFFFF";
+    private String aiTextColor = "#FFFFFF";             // HSV(0,0,100)
 
     // --- Window state (not shown in preferences dialog) ---
 
@@ -159,33 +139,7 @@ public class Preferences {
     /** License key (16 hex chars). */
     private String licenseKey = null;
 
-    private static String detectAIFont() {
-        String os = System.getProperty("os.name", "").toLowerCase();
-        String[] candidates;
-        if (os.contains("linux")) candidates = new String[]{"DejaVu Sans", "Arial", "Helvetica", "SansSerif"};
-        else if (os.contains("win")) candidates = new String[]{"Calibri", "Arial", "Helvetica", "SansSerif"};
-        else candidates = new String[]{"Arial", "Helvetica", "SansSerif"};
-        for (String name : candidates) {
-            Font f = new Font(name, Font.PLAIN, 14);
-            if (!f.getFamily().equals("Dialog")) return name;
-        }
-        return "SansSerif";
-    }
-
-    // --- LLM Getters/Setters ---
-
-    public String getLlmVendor() { return llmVendor; }
-    public void setLlmVendor(String llmVendor) { this.llmVendor = llmVendor; }
-    public String getLlmModel() { return llmModel; }
-    public void setLlmModel(String llmModel) { this.llmModel = llmModel; }
-    public String getLlmApiKey() { return llmApiKey; }
-    public void setLlmApiKey(String llmApiKey) { this.llmApiKey = llmApiKey; }
-    public String getLlmEndpoint() { return llmEndpoint; }
-    public void setLlmEndpoint(String llmEndpoint) { this.llmEndpoint = llmEndpoint; }
-    public String getAiFontFamily() { return aiFontFamily; }
-    public void setAiFontFamily(String aiFontFamily) { this.aiFontFamily = aiFontFamily; }
-    public int getAiFontSize() { return aiFontSize; }
-    public void setAiFontSize(int aiFontSize) { this.aiFontSize = aiFontSize; }
+    // --- AI Chat Color Getters/Setters ---
 
     public Color getUserPromptColorObj() { return Color.decode(userPromptColor); }
     public void setUserPromptColor(Color color) { this.userPromptColor = String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue()); }

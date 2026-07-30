@@ -1,6 +1,6 @@
-![app_icon_256](src/main/resources/app_icon_256.png)
+![app_icon_256](app/src/main/resources/app_icon_256.png)
 
-# LayoutLynx
+# LayoutLynx 1.1.0
 
 A lightweight HTML/CSS editor with a live preview pane, built for rapid front-end prototyping and learning.
 
@@ -30,11 +30,31 @@ The AI always sees your current document content, so its suggestions are context
 
 ### Supported Providers
 
-Configure your LLM provider in **Preferences → AI**:
+Configure your LLM provider via **AI Settings...** (in the Edit menu on macOS, or the LayoutLynx menu on Windows/Linux):
 
-Alibaba, Anthropic, Cerebras, DeepSeek, Google, Groq, Meta, Mistral, Moonshot AI, Ollama (local), OpenAI, Perplexity, xAI
+Alibaba, Anthropic, Cerebras, DeepSeek, Generic (YAML-configured), Generic OpenAI API, Google, Groq, Meta, Mistral, Moonshot AI, Ollama (local), OpenAI, Perplexity, xAI
 
 Set the vendor, model name, and API key. For Ollama, no API key is needed (runs locally on port 11434).
+
+AI connection settings are stored in `~/.glowingcat-ai-settings.json` and shared across Glowing Cat applications.
+
+## Project Structure
+
+This is a multi-module Maven project:
+
+```
+LayoutLynx/
+├── pom.xml              (parent POM)
+├── aichat/              (reusable AI chat module)
+│   ├── pom.xml
+│   └── src/main/java/com/glowingcat/aichat/
+└── app/                 (main application)
+    ├── pom.xml
+    └── src/main/java/com/glowingcat/
+```
+
+- **aichat** — Standalone AI chat panel with LLM integration, WebView-based markdown rendering, and preferences dialog. Reusable across Glowing Cat apps.
+- **app** — The LayoutLynx editor application (editor, preview, file tree, formatting, etc.)
 
 ## Requirements
 
@@ -50,6 +70,7 @@ mvn clean package
 ## Running
 
 ```bash
+cd app
 mvn exec:java
 ```
 
@@ -58,7 +79,7 @@ Or run the shaded JAR directly:
 ```bash
 java --enable-native-access=ALL-UNNAMED \
      --add-modules=javafx.controls,javafx.web,javafx.swing \
-     -jar target/LayoutLynx-1.0.0.jar
+     -jar app/target/LayoutLynx-1.1.0.jar
 ```
 
 ## Demo
@@ -72,8 +93,10 @@ A sample project is included in the `demo/` directory with an `index.html` and m
 - **Swing** — Primary UI framework (editor, dialogs, panels)
 - **RSyntaxTextArea 3.5** — Syntax highlighting, code folding, editor component
 - **GraalVM Polyglot 24.2** — JavaScript runtime for js-beautify code formatting
+- **CommonMark 0.24** — Markdown rendering in the AI chat panel
 - **Gson 2.10** — JSON parsing for preferences and AI API communication
-- **Maven** — Build tool with shade plugin for fat JAR packaging
+- **SnakeYAML 2.2** — YAML parsing for generic vendor configuration
+- **Maven** — Multi-module build with shade plugin for fat JAR packaging
 
 ----
  

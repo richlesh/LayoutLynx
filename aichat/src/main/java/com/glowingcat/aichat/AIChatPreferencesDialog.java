@@ -1,52 +1,38 @@
 /*
  * (c) 2026 Glowing Cat Software
  */
-
-/**
- * PreferencesDialog.java
- *
- * A modal dialog for editing LayoutLynx user preferences. Font settings on
- * the left, AI/LLM settings on the right.
- */
-package com.glowingcat;
+package com.glowingcat.aichat;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.http.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.regex.*;
 
-public class PreferencesDialog extends JDialog {
+/**
+ * Standalone dialog for AI Chat preferences. Saves settings to
+ * ~/.glowingcat-ai-settings.json via AIChatPreferences.
+ */
+public class AIChatPreferencesDialog extends JDialog {
 
-    private final JComboBox<String> editorFontCombo;
-    private final JComboBox<Integer> editorSizeCombo;
-    private final JComboBox<String> themeCombo;
-    private final JComboBox<String> previewFontCombo;
-    private final JComboBox<Integer> previewSizeCombo;
-    private final JComboBox<String> previewCodeFontCombo;
-    private final JComboBox<Integer> previewCodeSizeCombo;
-    private final Color[] highlightColor;
-    private final Color[] buttonHighlightColor;
-    private final JCheckBox useTabsBox;
-    private final JSpinner tabSizeSpinner;
     private final JComboBox<String> llmVendorCombo;
     private final JComboBox<String> llmModelCombo;
     private final JPasswordField llmApiKeyField;
     private final JTextField llmEndpointField;
     private final JComboBox<String> aiFontCombo;
     private final JComboBox<Integer> aiFontSizeCombo;
+    private final JComboBox<String> aiCodeFontCombo;
+    private final JComboBox<Integer> aiCodeFontSizeCombo;
     private final Color[] userPromptColor;
     private final Color[] userTextColor;
     private final Color[] aiResponseColor;
     private final Color[] aiTextColor;
     private boolean confirmed = false;
+    private final Runnable[] fetchModelsHolder = new Runnable[1];
 
     private static final Integer[] FONT_SIZES = {8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36};
 
@@ -55,6 +41,7 @@ public class PreferencesDialog extends JDialog {
         {"Anthropic", "https://console.anthropic.com/settings/keys", "https://api.anthropic.com/v1"},
         {"Cerebras", "https://cloud.cerebras.ai", "https://api.cerebras.ai/v1"},
         {"DeepSeek", "https://platform.deepseek.com/api_keys", "https://api.deepseek.com/v1"},
+        {"Generic", "", ""},
         {"Generic OpenAI API", "", ""},
         {"Google", "https://aistudio.google.com/apikey", "https://generativelanguage.googleapis.com/v1beta/openai"},
         {"Groq", "https://console.groq.com/keys", "https://api.groq.com/openai/v1"},
@@ -67,37 +54,15 @@ public class PreferencesDialog extends JDialog {
         {"xAI", "https://console.x.ai", "https://api.x.ai/v1"},
     };
 
-    public PreferencesDialog(JFrame owner, Preferences prefs) {
-        super(owner, "Preferences", true);
+    public AIChatPreferencesDialog(Window owner, AIChatPreferences prefs) {
+        this(owner, prefs, null);
+    }
+
+    public AIChatPreferencesDialog(Window owner, AIChatPreferences prefs, ChatColors colors) {
+        super(owner, "AI Settings", ModalityType.APPLICATION_MODAL);
 
         String[] fontFamilies = GraphicsEnvironment.getLocalGraphicsEnvironment()
                 .getAvailableFontFamilyNames();
-
-        // Initialize font combos
-        editorFontCombo = new JComboBox<>(fontFamilies);
-        editorFontCombo.setSelectedItem(prefs.getEditorFontFamily());
-        editorSizeCombo = new JComboBox<>(FONT_SIZES);
-        editorSizeCombo.setSelectedItem(prefs.getEditorFontSize());
-
-        // Initialize theme combo
-        themeCombo = new JComboBox<>(new String[]{"Light", "Dark"});
-        themeCombo.setSelectedItem(prefs.isDarkMode() ? "Dark" : "Light");
-
-        previewFontCombo = new JComboBox<>(fontFamilies);
-        previewFontCombo.setSelectedItem(prefs.getPreviewFontFamily());
-        previewSizeCombo = new JComboBox<>(FONT_SIZES);
-        previewSizeCombo.setSelectedItem(prefs.getPreviewFontSize());
-
-        previewCodeFontCombo = new JComboBox<>(fontFamilies);
-        previewCodeFontCombo.setSelectedItem(prefs.getPreviewCodeFontFamily());
-        previewCodeSizeCombo = new JComboBox<>(FONT_SIZES);
-        previewCodeSizeCombo.setSelectedItem(prefs.getPreviewCodeFontSize());
-
-        // Initialize editor settings
-        highlightColor = new Color[]{prefs.getHighlightColorObj()};
-        buttonHighlightColor = new Color[]{prefs.getButtonHighlightColorObj()};
-        useTabsBox = new JCheckBox("Use Tabs", prefs.isUseTabs());
-        tabSizeSpinner = new JSpinner(new SpinnerNumberModel(prefs.getTabSize(), 1, 8, 1));
 
         // Initialize LLM combos
         String[] vendorNames = new String[VENDOR_DATA.length];
@@ -117,23 +82,35 @@ public class PreferencesDialog extends JDialog {
         aiFontSizeCombo = new JComboBox<>(FONT_SIZES);
         aiFontSizeCombo.setSelectedItem(prefs.getAiFontSize());
 
-        userPromptColor = new Color[]{prefs.getUserPromptColorObj()};
-        userTextColor = new Color[]{prefs.getUserTextColorObj()};
-        aiResponseColor = new Color[]{prefs.getAiResponseColorObj()};
-        aiTextColor = new Color[]{prefs.getAiTextColorObj()};
+        // Monospaced font combo for code
+        String[] monoFonts = java.util.Arrays.stream(fontFamilies)
+            .filter(name -> {
+                Font f = new Font(name, Font.PLAIN, 13);
+                FontMetrics fm = new JLabel().getFontMetrics(f);
+                return fm.charWidth('i') == fm.charWidth('m');
+            })
+            .toArray(String[]::new);
+        aiCodeFontCombo = new JComboBox<>(monoFonts);
+        aiCodeFontCombo.setSelectedItem(prefs.getAiCodeFontFamily());
+        aiCodeFontSizeCombo = new JComboBox<>(FONT_SIZES);
+        aiCodeFontSizeCombo.setSelectedItem(prefs.getAiCodeFontSize());
 
-        // === LEFT PANEL: Font Settings ===
-        JPanel leftPanel = buildFontPanel();
+        // Use ChatColors if provided, otherwise fall back to AIChatPreferences
+        if (colors != null) {
+            userPromptColor = new Color[]{Color.decode(colors.getUserPromptColor())};
+            userTextColor = new Color[]{Color.decode(colors.getUserTextColor())};
+            aiResponseColor = new Color[]{Color.decode(colors.getAiResponseColor())};
+            aiTextColor = new Color[]{Color.decode(colors.getAiTextColor())};
+        } else {
+            userPromptColor = new Color[]{prefs.getUserPromptColorObj()};
+            userTextColor = new Color[]{prefs.getUserTextColorObj()};
+            aiResponseColor = new Color[]{prefs.getAiResponseColorObj()};
+            aiTextColor = new Color[]{prefs.getAiTextColorObj()};
+        }
 
-        // === RIGHT PANEL: LLM / AI Settings ===
-        JPanel rightPanel = buildLlmPanel(prefs);
-
-        // === Main layout: left | right ===
-        JPanel mainPanel = new JPanel(new GridLayout(1, 2, 16, 0));
+        // Build the panel
+        JPanel mainPanel = buildPanel(prefs);
         mainPanel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-        mainPanel.add(leftPanel);
-        mainPanel.add(rightPanel);
-
         add(mainPanel, BorderLayout.CENTER);
 
         // Buttons
@@ -150,6 +127,26 @@ public class PreferencesDialog extends JDialog {
         Runnable fetchModels = () -> {
             int vi = llmVendorCombo.getSelectedIndex();
             String apiKey = new String(llmApiKeyField.getPassword()).trim();
+
+            // Handle Generic (YAML-configured) vendor separately
+            if ("Generic".equals(VENDOR_DATA[vi][0])) {
+                llmModelCombo.removeAllItems();
+                new Thread(() -> {
+                    try {
+                        GenericVendorConfig config = new GenericVendorConfig();
+                        List<String> models = config.fetchModels(apiKey);
+                        SwingUtilities.invokeLater(() -> {
+                            llmModelCombo.removeAllItems();
+                            for (String mod : models) llmModelCombo.addItem(mod);
+                            if (prefs.getLlmModel() != null) llmModelCombo.setSelectedItem(prefs.getLlmModel());
+                        });
+                    } catch (Exception ex) {
+                        // leave model combo empty on failure
+                    }
+                }).start();
+                return;
+            }
+
             String resolvedUrl = VENDOR_DATA[vi][2];
             if ("Generic OpenAI API".equals(VENDOR_DATA[vi][0])) {
                 resolvedUrl = llmEndpointField.getText().trim();
@@ -157,7 +154,6 @@ public class PreferencesDialog extends JDialog {
                     llmModelCombo.removeAllItems();
                     return;
                 }
-                // Strip trailing slash for consistency
                 if (resolvedUrl.endsWith("/")) resolvedUrl = resolvedUrl.substring(0, resolvedUrl.length() - 1);
             }
             final String baseUrl = resolvedUrl;
@@ -201,6 +197,7 @@ public class PreferencesDialog extends JDialog {
                 }
             }).start();
         };
+        fetchModelsHolder[0] = fetchModels;
         if (prefs.getLlmModel() != null) llmModelCombo.addItem(prefs.getLlmModel());
         fetchModels.run();
         llmVendorCombo.addActionListener(e -> {
@@ -235,159 +232,7 @@ public class PreferencesDialog extends JDialog {
         setResizable(false);
     }
 
-    private JPanel buildFontPanel() {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Fonts"));
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(4, 6, 4, 6);
-        gbc.anchor = GridBagConstraints.WEST;
-        int row = 0;
-
-        // Editor section
-        gbc.gridx = 0; gbc.gridy = row; gbc.gridwidth = 2;
-        JLabel editorHeader = new JLabel("Editor Source");
-        editorHeader.setFont(editorHeader.getFont().deriveFont(Font.BOLD));
-        panel.add(editorHeader, gbc);
-
-        gbc.gridwidth = 1;
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Font:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL; gbc.weightx = 1;
-        panel.add(editorFontCombo, gbc);
-        gbc.weightx = 0;
-
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Size:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(editorSizeCombo, gbc);
-
-        // Separator
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(10, 6, 10, 6);
-        panel.add(new JSeparator(), gbc);
-        gbc.insets = new Insets(4, 6, 4, 6);
-
-        // Preview Text section
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2;
-        JLabel previewHeader = new JLabel("Preview Text");
-        previewHeader.setFont(previewHeader.getFont().deriveFont(Font.BOLD));
-        panel.add(previewHeader, gbc);
-
-        gbc.gridwidth = 1;
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Font:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(previewFontCombo, gbc);
-
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Size:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(previewSizeCombo, gbc);
-
-        // Separator
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(10, 6, 10, 6);
-        panel.add(new JSeparator(), gbc);
-        gbc.insets = new Insets(4, 6, 4, 6);
-
-        // Preview Code section
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2;
-        JLabel previewCodeHeader = new JLabel("Preview Code");
-        previewCodeHeader.setFont(previewCodeHeader.getFont().deriveFont(Font.BOLD));
-        panel.add(previewCodeHeader, gbc);
-
-        gbc.gridwidth = 1;
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Font:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(previewCodeFontCombo, gbc);
-
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Size:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(previewCodeSizeCombo, gbc);
-
-        // Separator
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(10, 6, 10, 6);
-        panel.add(new JSeparator(), gbc);
-        gbc.insets = new Insets(4, 6, 4, 6);
-
-        // Editor section
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2;
-        JLabel editorSettingsHeader = new JLabel("Editor");
-        editorSettingsHeader.setFont(editorSettingsHeader.getFont().deriveFont(Font.BOLD));
-        panel.add(editorSettingsHeader, gbc);
-
-        gbc.gridwidth = 1;
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Highlight Color:"), gbc);
-        JPanel hlSwatch = new JPanel();
-        hlSwatch.setBackground(highlightColor[0]);
-        hlSwatch.setPreferredSize(new Dimension(60, 24));
-        hlSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
-        hlSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        hlSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                Color c = JColorChooser.showDialog(PreferencesDialog.this, "Highlight Color", highlightColor[0]);
-                if (c != null) { highlightColor[0] = c; hlSwatch.setBackground(c); }
-            }
-        });
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
-        panel.add(hlSwatch, gbc);
-
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.NONE;
-        panel.add(useTabsBox, gbc);
-
-        gbc.gridwidth = 1;
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Spaces for tab:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
-        panel.add(tabSizeSpinner, gbc);
-
-        // Separator
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(10, 6, 10, 6);
-        panel.add(new JSeparator(), gbc);
-        gbc.insets = new Insets(4, 6, 4, 6);
-
-        // Appearance section
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2;
-        JLabel themeHeader = new JLabel("Appearance");
-        themeHeader.setFont(themeHeader.getFont().deriveFont(Font.BOLD));
-        panel.add(themeHeader, gbc);
-
-        gbc.gridwidth = 1;
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Theme:"), gbc);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
-        panel.add(themeCombo, gbc);
-
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
-        panel.add(new JLabel("Button Highlight:"), gbc);
-        JPanel btnHlSwatch = new JPanel();
-        btnHlSwatch.setBackground(buttonHighlightColor[0]);
-        btnHlSwatch.setPreferredSize(new Dimension(60, 24));
-        btnHlSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
-        btnHlSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        btnHlSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                Color c = JColorChooser.showDialog(PreferencesDialog.this, "Button Highlight Color", buttonHighlightColor[0]);
-                if (c != null) { buttonHighlightColor[0] = c; btnHlSwatch.setBackground(c); }
-            }
-        });
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
-        panel.add(btnHlSwatch, gbc);
-
-        // Vertical glue to push content to top
-        gbc.gridy = ++row; gbc.gridx = 0; gbc.gridwidth = 2; gbc.weighty = 1;
-        gbc.fill = GridBagConstraints.VERTICAL;
-        panel.add(Box.createVerticalGlue(), gbc);
-
-        return panel;
-    }
-
-    private JPanel buildLlmPanel(Preferences prefs) {
+    private JPanel buildPanel(AIChatPreferences prefs) {
         JPanel panel = new JPanel(new GridBagLayout());
         panel.setBorder(BorderFactory.createTitledBorder("AI Chat"));
         GridBagConstraints gbc = new GridBagConstraints();
@@ -420,6 +265,7 @@ public class PreferencesDialog extends JDialog {
 
         JLabel endpointLabel = new JLabel("Endpoint:");
         JLabel apiKeyLink = new JLabel("<html><nobr><a href=''>Get API key...</a></nobr></html>");
+        JLabel configureLink = new JLabel("<html><nobr><a href=''>Configure...</a></nobr></html>");
 
         gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
         panel.add(endpointLabel, gbc);
@@ -428,9 +274,11 @@ public class PreferencesDialog extends JDialog {
 
         // Show/hide endpoint based on vendor selection
         boolean isGeneric = "Generic OpenAI API".equals(llmVendorCombo.getSelectedItem());
+        boolean isGenericYaml = "Generic".equals(llmVendorCombo.getSelectedItem());
         endpointLabel.setVisible(isGeneric);
         llmEndpointField.setVisible(isGeneric);
-        apiKeyLink.setVisible(!isGeneric);
+        apiKeyLink.setVisible(!isGeneric && !isGenericYaml);
+        configureLink.setVisible(isGenericYaml);
 
         gbc.gridy = ++row; gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
         apiKeyLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -446,12 +294,26 @@ public class PreferencesDialog extends JDialog {
         });
         panel.add(apiKeyLink, gbc);
 
+        configureLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        configureLink.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                GenericVendorDialog dlg = new GenericVendorDialog(AIChatPreferencesDialog.this);
+                dlg.setVisible(true);
+                if (dlg.isConfirmed() && fetchModelsHolder[0] != null) {
+                    fetchModelsHolder[0].run();
+                }
+            }
+        });
+        panel.add(configureLink, gbc);
+
         // Update endpoint/link visibility when vendor changes
         llmVendorCombo.addActionListener(e -> {
             boolean generic = "Generic OpenAI API".equals(llmVendorCombo.getSelectedItem());
+            boolean genericYaml = "Generic".equals(llmVendorCombo.getSelectedItem());
             endpointLabel.setVisible(generic);
             llmEndpointField.setVisible(generic);
-            apiKeyLink.setVisible(!generic);
+            apiKeyLink.setVisible(!generic && !genericYaml);
+            configureLink.setVisible(genericYaml);
         });
 
         // Separator
@@ -478,6 +340,16 @@ public class PreferencesDialog extends JDialog {
         panel.add(aiFontSizeCombo, gbc);
 
         gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
+        panel.add(new JLabel("Code Font:"), gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(aiCodeFontCombo, gbc);
+
+        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
+        panel.add(new JLabel("Code Size:"), gbc);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
+        panel.add(aiCodeFontSizeCombo, gbc);
+
+        gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
         panel.add(new JLabel("User Color:"), gbc);
         JPanel userColorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
         userColorPanel.setOpaque(false);
@@ -488,7 +360,7 @@ public class PreferencesDialog extends JDialog {
         userSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         userSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent e) {
-                Color c = JColorChooser.showDialog(PreferencesDialog.this, "User Prompt Color", userPromptColor[0]);
+                Color c = JColorChooser.showDialog(AIChatPreferencesDialog.this, "User Prompt Color", userPromptColor[0]);
                 if (c != null) { userPromptColor[0] = c; userSwatch.setBackground(c); }
             }
         });
@@ -501,7 +373,7 @@ public class PreferencesDialog extends JDialog {
         userTextSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         userTextSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent e) {
-                Color c = JColorChooser.showDialog(PreferencesDialog.this, "User Text Color", userTextColor[0]);
+                Color c = JColorChooser.showDialog(AIChatPreferencesDialog.this, "User Text Color", userTextColor[0]);
                 if (c != null) { userTextColor[0] = c; userTextSwatch.setBackground(c); }
             }
         });
@@ -520,7 +392,7 @@ public class PreferencesDialog extends JDialog {
         aiSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         aiSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent e) {
-                Color c = JColorChooser.showDialog(PreferencesDialog.this, "AI Response Color", aiResponseColor[0]);
+                Color c = JColorChooser.showDialog(AIChatPreferencesDialog.this, "AI Response Color", aiResponseColor[0]);
                 if (c != null) { aiResponseColor[0] = c; aiSwatch.setBackground(c); }
             }
         });
@@ -533,7 +405,7 @@ public class PreferencesDialog extends JDialog {
         aiTextSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         aiTextSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent e) {
-                Color c = JColorChooser.showDialog(PreferencesDialog.this, "AI Text Color", aiTextColor[0]);
+                Color c = JColorChooser.showDialog(AIChatPreferencesDialog.this, "AI Text Color", aiTextColor[0]);
                 if (c != null) { aiTextColor[0] = c; aiTextSwatch.setBackground(c); }
             }
         });
@@ -551,18 +423,7 @@ public class PreferencesDialog extends JDialog {
 
     public boolean isConfirmed() { return confirmed; }
 
-    public void applyTo(Preferences prefs) {
-        prefs.setEditorFontFamily((String) editorFontCombo.getSelectedItem());
-        prefs.setEditorFontSize((Integer) editorSizeCombo.getSelectedItem());
-        prefs.setTheme("Dark".equals(themeCombo.getSelectedItem()) ? "dark" : "light");
-        prefs.setButtonHighlightColor(buttonHighlightColor[0]);
-        prefs.setPreviewFontFamily((String) previewFontCombo.getSelectedItem());
-        prefs.setPreviewFontSize((Integer) previewSizeCombo.getSelectedItem());
-        prefs.setPreviewCodeFontFamily((String) previewCodeFontCombo.getSelectedItem());
-        prefs.setPreviewCodeFontSize((Integer) previewCodeSizeCombo.getSelectedItem());
-        prefs.setHighlightColor(highlightColor[0]);
-        prefs.setUseTabs(useTabsBox.isSelected());
-        prefs.setTabSize((Integer) tabSizeSpinner.getValue());
+    public void applyTo(AIChatPreferences prefs) {
         prefs.setLlmVendor((String) llmVendorCombo.getSelectedItem());
         Object modelItem = llmModelCombo.getSelectedItem();
         prefs.setLlmModel(modelItem != null ? modelItem.toString() : null);
@@ -572,9 +433,19 @@ public class PreferencesDialog extends JDialog {
         prefs.setLlmEndpoint(endpoint.isEmpty() ? null : endpoint);
         prefs.setAiFontFamily((String) aiFontCombo.getSelectedItem());
         prefs.setAiFontSize((Integer) aiFontSizeCombo.getSelectedItem());
-        prefs.setUserPromptColor(userPromptColor[0]);
-        prefs.setUserTextColor(userTextColor[0]);
-        prefs.setAiResponseColor(aiResponseColor[0]);
-        prefs.setAiTextColor(aiTextColor[0]);
+        prefs.setAiCodeFontFamily((String) aiCodeFontCombo.getSelectedItem());
+        prefs.setAiCodeFontSize((Integer) aiCodeFontSizeCombo.getSelectedItem());
     }
+
+    /** Get the selected user prompt bubble background color. */
+    public Color getSelectedUserPromptColor() { return userPromptColor[0]; }
+
+    /** Get the selected user prompt text color. */
+    public Color getSelectedUserTextColor() { return userTextColor[0]; }
+
+    /** Get the selected AI response bubble background color. */
+    public Color getSelectedAiResponseColor() { return aiResponseColor[0]; }
+
+    /** Get the selected AI response text color. */
+    public Color getSelectedAiTextColor() { return aiTextColor[0]; }
 }

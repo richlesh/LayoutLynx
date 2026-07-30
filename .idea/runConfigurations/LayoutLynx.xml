@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="LayoutLynx" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="com.glowingcat.Main" />
-    <module name="LayoutLynx" />
+    <module name="app" />
     <option name="VM_PARAMETERS" value="-Dapple.laf.useScreenMenuBar=true" />
     <method v="2">
       <option name="Make" enabled="true" />
