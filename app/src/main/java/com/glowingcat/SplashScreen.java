@@ -41,7 +41,7 @@ public class SplashScreen {
         panel.add(Box.createVerticalStrut(6));
 
         // Version
-        JLabel version = new JLabel("Version 1.1.0");
+        JLabel version = new JLabel("Version " + AppVersion.get());
         version.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
         version.setForeground(new Color(170, 170, 170));
         version.setAlignmentX(Component.CENTER_ALIGNMENT);

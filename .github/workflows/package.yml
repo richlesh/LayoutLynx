@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version tag (e.g. 1.1.0)'
+        description: 'Release version tag (e.g. 1.2.0)'
         required: true
 
 permissions:
@@ -108,6 +108,10 @@ jobs:
           }
           EOF
 
+      - name: Set Maven project version
+        shell: bash
+        run: mvn versions:set -DnewVersion="${{ env.APP_VERSION }}" -DprocessAllModules=true -DgenerateBackupPoms=false -q
+
       - name: Build fat JAR
         shell: bash
         run: |
@@ -206,6 +210,41 @@ jobs:
                 TMPDIR=$(mktemp -d)
                 dpkg-deb -R "$DEB_FILE" "$TMPDIR"
                 sed -i 's/^Depends:.*/Depends: xdg-utils/' "$TMPDIR/DEBIAN/control"
+
+                # Ensure icon is installed to system icon directories
+                mkdir -p "$TMPDIR/usr/share/icons/hicolor/256x256/apps"
+                cp ${{ matrix.icon }} "$TMPDIR/usr/share/icons/hicolor/256x256/apps/layoutlynx.png"
+                mkdir -p "$TMPDIR/usr/share/pixmaps"
+                cp ${{ matrix.icon }} "$TMPDIR/usr/share/pixmaps/layoutlynx.png"
+
+                # Fix .desktop file icon reference if needed
+                DESKTOP_FILE=$(find "$TMPDIR" -name "*.desktop" | head -1)
+                if [ -n "$DESKTOP_FILE" ]; then
+                  sed -i 's|^Icon=.*|Icon=layoutlynx|' "$DESKTOP_FILE"
+                fi
+
+                # Add postinst script to update icon cache
+                cat > "$TMPDIR/DEBIAN/postinst" <<'POSTINST'
+          #!/bin/bash
+          # Update icon cache
+          if command -v gtk-update-icon-cache &>/dev/null; then
+            gtk-update-icon-cache -f /usr/share/icons/hicolor 2>/dev/null || true
+          fi
+          # Copy config folder to the Desktop of the user who initiated the install
+          REAL_USER="${SUDO_USER:-$USER}"
+          if [ -n "$REAL_USER" ] && [ "$REAL_USER" != "root" ]; then
+            USER_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+            DESKTOP="$USER_HOME/Desktop"
+            if [ -d "$DESKTOP" ]; then
+              if [ -d /opt/layoutlynx/config ]; then
+                cp -R /opt/layoutlynx/config "$DESKTOP/LayoutLynx Configs"
+                chown -R "$REAL_USER":"$(id -gn "$REAL_USER")" "$DESKTOP/LayoutLynx Configs"
+              fi
+            fi
+          fi
+          exit 0
+          POSTINST
+                chmod 755 "$TMPDIR/DEBIAN/postinst"
                 dpkg-deb -b "$TMPDIR" "$DEB_FILE"
                 rm -rf "$TMPDIR"
               fi
@@ -385,6 +424,10 @@ jobs:
               static final String LICENSE_SALT = "${LICENSE_SALT}";
           }
           EOF
+
+      - name: Set Maven project version
+        shell: bash
+        run: mvn versions:set -DnewVersion="${{ env.APP_VERSION }}" -DprocessAllModules=true -DgenerateBackupPoms=false -q
 
       - name: Build app JAR (excluding JavaFX)
         run: |

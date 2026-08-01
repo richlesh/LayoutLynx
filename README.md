@@ -1,6 +1,6 @@
 ![app_icon_256](app/src/main/resources/app_icon_256.png)
 
-# LayoutLynx 1.1.0
+# LayoutLynx 1.2.0
 
 A lightweight HTML/CSS editor with a live preview pane, built for rapid front-end prototyping and learning.
 
@@ -79,7 +79,7 @@ Or run the shaded JAR directly:
 ```bash
 java --enable-native-access=ALL-UNNAMED \
      --add-modules=javafx.controls,javafx.web,javafx.swing \
-     -jar app/target/LayoutLynx-1.1.0.jar
+     -jar app/target/LayoutLynx-1.2.0.jar
 ```
 
 ## Demo

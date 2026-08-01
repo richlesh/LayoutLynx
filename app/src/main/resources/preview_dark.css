@@ -1,0 +1,138 @@
+/* Preview Panel Styles — Dark Mode */
+
+::-webkit-scrollbar {
+    width: 11px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
+
+body {
+    padding: 10px;
+    padding-right: 18px;
+    line-height: 1.6;
+    overflow-x: hidden;
+    background: #1e1e1e;
+    color: #d4d4d4;
+}
+
+h1, h2, h3 {
+    color: #e0e0e0;
+}
+
+code {
+    color: #d4d4d4;
+    background: #2d2d2d;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+pre {
+    color: #d4d4d4;
+    background: #2d2d2d;
+    padding: 10px;
+    border-radius: 5px;
+    overflow-x: auto;
+    line-height: 1.4;
+}
+
+pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+}
+
+blockquote {
+    border-left: 4px solid #555;
+    margin-left: 0;
+    padding-left: 16px;
+    color: #aaa;
+}
+
+table {
+    color: #d4d4d4;
+    border-collapse: collapse;
+    margin: 12px auto;
+}
+
+th, td {
+    border: 1px solid #444;
+    padding: 6px 12px;
+}
+
+td[align=left], th[align=left] { text-align: left; }
+td[align=center], th[align=center] { text-align: center; }
+td[align=right], th[align=right] { text-align: right; }
+
+th {
+    background-color: #2d2d2d;
+    font-weight: bold;
+}
+
+tr:nth-child(even) {
+    background-color: #252525;
+}
+
+tr:nth-child(odd) {
+    background-color: #1e1e1e;
+}
+
+img {
+    max-width: 75%;
+    display: block;
+    margin: 12px auto;
+}
+
+a {
+    color: #6db3f2;
+}
+
+li {
+    margin: 0;
+    padding: 0;
+}
+
+li p {
+    margin: 0;
+    display: inline;
+}
+
+ul, ol {
+    padding-left: 24px;
+}
+
+input[type=checkbox] {
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+li:has(> input[type=checkbox]) {
+    list-style-type: none;
+}
+
+mjx-container {
+    overflow: visible !important;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+mjx-container[display=true] {
+    display: block;
+    text-align: center;
+    margin: 1em 0 !important;
+}
+
+mjx-container svg {
+    overflow: visible;
+}
