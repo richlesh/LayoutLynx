@@ -218,7 +218,7 @@ jobs:
                 cp ${{ matrix.icon }} "$TMPDIR/usr/share/pixmaps/layoutlynx.png"
 
                 # Fix .desktop file icon reference if needed
-                DESKTOP_FILE=$(find "$TMPDIR" -name "*.desktop" | head -1)
+                DESKTOP_FILE=$(find "$TMPDIR" -name "*.desktop" -type f | head -1)
                 if [ -n "$DESKTOP_FILE" ]; then
                   sed -i 's|^Icon=.*|Icon=layoutlynx|' "$DESKTOP_FILE"
                 fi
