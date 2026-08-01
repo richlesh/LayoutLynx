@@ -453,13 +453,28 @@ public class GenericVendorConfig {
                                   String prompt, List<Map<String, String>> messages) {
         if (template == null) return null;
         String result = template;
+
+        // Replace simple scalar variables first
         result = result.replace("${AUTH_TOKEN}", authToken != null ? authToken : "");
         result = result.replace("${MODEL}", model != null ? model : "");
         result = result.replace("${PROMPT}", jsonEscape(prompt != null ? prompt : ""));
         result = result.replace("${GUID}", conversationGuid);
 
+        // Replace ${SYSTEM_PROMPT} before message arrays, since the system prompt
+        // is a simple scalar and won't contain template variable patterns.
         if (messages != null) {
-            if (result.contains("${MESSAGES}")) {
+            if (template.contains("${SYSTEM_PROMPT}")) {
+                String sysContent = messages.stream()
+                    .filter(m -> "system".equals(m.get("role")))
+                    .map(m -> m.get("content"))
+                    .findFirst().orElse("");
+                result = result.replace("${SYSTEM_PROMPT}", jsonEscape(sysContent));
+            }
+
+            // Replace message arrays LAST. These inject full user content which may
+            // contain literal "${VAR}" text (e.g. documentation about template variables).
+            // By doing these last, no further replacements will corrupt the injected content.
+            if (template.contains("${MESSAGES}")) {
                 StringBuilder sb = new StringBuilder("[");
                 for (int i = 0; i < messages.size(); i++) {
                     if (i > 0) sb.append(",");
@@ -471,7 +486,7 @@ public class GenericVendorConfig {
                 result = result.replace("${MESSAGES}", sb.toString());
             }
 
-            if (result.contains("${MESSAGES_NO_SYSTEM}")) {
+            if (template.contains("${MESSAGES_NO_SYSTEM}")) {
                 StringBuilder sb = new StringBuilder("[");
                 boolean first = true;
                 for (Map<String, String> msg : messages) {
@@ -484,25 +499,33 @@ public class GenericVendorConfig {
                 sb.append("]");
                 result = result.replace("${MESSAGES_NO_SYSTEM}", sb.toString());
             }
-
-            if (result.contains("${SYSTEM_PROMPT}")) {
-                String sysContent = messages.stream()
-                    .filter(m -> "system".equals(m.get("role")))
-                    .map(m -> m.get("content"))
-                    .findFirst().orElse("");
-                result = result.replace("${SYSTEM_PROMPT}", jsonEscape(sysContent));
-            }
         }
 
         return result;
     }
 
     private static String jsonEscape(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                case '\b' -> sb.append("\\b");
+                case '\f' -> sb.append("\\f");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /**
