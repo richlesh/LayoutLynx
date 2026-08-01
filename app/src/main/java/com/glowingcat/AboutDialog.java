@@ -43,7 +43,7 @@ public class AboutDialog {
         panel.add(subtitle);
         panel.add(Box.createVerticalStrut(10));
 
-        JLabel ver = new JLabel("Version 1.1.0");
+        JLabel ver = new JLabel("Version " + AppVersion.get());
         ver.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
         ver.setForeground(new Color(180, 180, 180));
         ver.setAlignmentX(Component.CENTER_ALIGNMENT);

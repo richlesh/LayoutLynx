@@ -61,6 +61,7 @@ public class AIChatPanel extends JPanel {
     private int promptCount = 0;
     private LLMClient llmClient;
     private Runnable promptNagCallback;
+    private boolean darkMode = false;
 
     /** Internal chat message record. */
     private static class ChatMessage {
@@ -281,8 +282,23 @@ public class AIChatPanel extends JPanel {
                 if (index >= 0 && index < chatMessages.size()) {
                     ChatMessage msg = chatMessages.get(index);
                     if (msg instanceof ApprovalMessage am) {
-                        msg.accepted = true;
-                        editor.setText(am.replacementMarkdown);
+                        if (am.diff != null) {
+                            // Apply unified diff to current document
+                            try {
+                                String patched = DiffApplier.apply(editor.getText(), am.diff);
+                                msg.accepted = true;
+                                editor.setText(patched);
+                            } catch (DiffApplier.DiffException ex) {
+                                // If diff fails, show error in chat
+                                ChatMessage errMsg = new ChatMessage("assistant",
+                                    "Failed to apply diff: " + ex.getMessage() + ". Try asking the AI to regenerate the changes.");
+                                chatMessages.add(errMsg);
+                            }
+                        } else if (am.replacementMarkdown != null) {
+                            // Full document replacement
+                            msg.accepted = true;
+                            editor.setText(am.replacementMarkdown);
+                        }
                         renderChat();
                     }
                 }
@@ -305,9 +321,16 @@ public class AIChatPanel extends JPanel {
             SwingUtilities.invokeLater(() -> {
                 if (index >= 0 && index < chatMessages.size()) {
                     ChatMessage msg = chatMessages.get(index);
-                    String md = (msg instanceof ApprovalMessage am) ? am.replacementMarkdown : msg.markdown;
-                    StringSelection sel = new StringSelection(md);
-                    Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, null);
+                    String md;
+                    if (msg instanceof ApprovalMessage am) {
+                        md = am.diff != null ? am.diff : am.replacementMarkdown;
+                    } else {
+                        md = msg.markdown;
+                    }
+                    if (md != null) {
+                        StringSelection sel = new StringSelection(md);
+                        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, null);
+                    }
                 }
             });
         }
@@ -337,6 +360,12 @@ public class AIChatPanel extends JPanel {
     /** Set or replace the chat colors at runtime and re-render. */
     public void setChatColors(ChatColors colors) {
         this.chatColors = colors;
+        renderChat();
+    }
+
+    /** Set dark mode and re-render the chat. */
+    public void setDarkMode(boolean dark) {
+        this.darkMode = dark;
         renderChat();
     }
 
@@ -406,6 +435,27 @@ public class AIChatPanel extends JPanel {
         // Normalize line endings
         String normalized = response.replace("\r\n", "\n").replace("\r", "\n");
 
+        // Check for ```diff block (preferred format for changes)
+        int diffStart = normalized.indexOf("```diff\n");
+        if (diffStart >= 0) {
+            int blockStart = normalized.indexOf("\n", diffStart) + 1;
+            int blockEnd = findClosingFence(normalized, blockStart);
+            if (blockEnd > blockStart) {
+                String diffContent = normalized.substring(blockStart, blockEnd);
+                String explanation = normalized.substring(0, diffStart).trim();
+                int fenceEndPos = normalized.indexOf("\n", blockEnd + 1);
+                if (fenceEndPos < 0) fenceEndPos = blockEnd + 4;
+                if (fenceEndPos < normalized.length()) {
+                    String after = normalized.substring(fenceEndPos).trim();
+                    if (!after.isEmpty()) explanation += (explanation.isEmpty() ? "" : "\n") + after;
+                }
+                chatMessages.add(new ApprovalMessage(explanation, null, diffContent));
+                renderChat();
+                return;
+            }
+        }
+
+        // Check for ```markdown or ```md block (full replacement, for new documents)
         int codeStart = normalized.indexOf("```markdown\n");
         if (codeStart < 0) codeStart = normalized.indexOf("```md\n");
         if (codeStart < 0) codeStart = normalized.indexOf("```markdown ");
@@ -413,22 +463,7 @@ public class AIChatPanel extends JPanel {
 
         if (codeStart >= 0) {
             int blockStart = normalized.indexOf("\n", codeStart) + 1;
-            int blockEnd = -1;
-            int searchFrom = blockStart;
-            while (searchFrom < normalized.length()) {
-                int candidate = normalized.indexOf("\n```", searchFrom);
-                if (candidate < 0) break;
-                int afterFence = candidate + 4;
-                if (afterFence >= normalized.length()) {
-                    blockEnd = candidate;
-                } else {
-                    char nextChar = normalized.charAt(afterFence);
-                    if (nextChar == '\n' || normalized.substring(afterFence).trim().isEmpty()) {
-                        blockEnd = candidate;
-                    }
-                }
-                searchFrom = candidate + 4;
-            }
+            int blockEnd = findClosingFence(normalized, blockStart);
             if (blockEnd > blockStart) {
                 String newMarkdown = normalized.substring(blockStart, blockEnd);
                 String explanation = normalized.substring(0, codeStart).trim();
@@ -438,13 +473,7 @@ public class AIChatPanel extends JPanel {
                     String after = normalized.substring(fenceEndPos).trim();
                     if (!after.isEmpty()) explanation += (explanation.isEmpty() ? "" : "\n") + after;
                 }
-                // Create approval message
-                ChatMessage approvalMsg = new ChatMessage("assistant",
-                    explanation.isEmpty() ? newMarkdown : explanation);
-                approvalMsg.isApproval = true;
-                // Store the full replacement markdown in the message
-                // We use a special field - store it as the markdown content
-                chatMessages.add(new ApprovalMessage(explanation, newMarkdown));
+                chatMessages.add(new ApprovalMessage(explanation, newMarkdown, null));
                 renderChat();
                 return;
             }
@@ -454,17 +483,41 @@ public class AIChatPanel extends JPanel {
         renderChat();
     }
 
+    /** Find the last closing ``` fence after a block start position. */
+    private int findClosingFence(String text, int blockStart) {
+        int blockEnd = -1;
+        int searchFrom = blockStart;
+        while (searchFrom < text.length()) {
+            int candidate = text.indexOf("\n```", searchFrom);
+            if (candidate < 0) break;
+            int afterFence = candidate + 4;
+            if (afterFence >= text.length()) {
+                blockEnd = candidate;
+            } else {
+                char nextChar = text.charAt(afterFence);
+                if (nextChar == '\n' || text.substring(afterFence).trim().isEmpty()) {
+                    blockEnd = candidate;
+                }
+            }
+            searchFrom = candidate + 4;
+        }
+        return blockEnd;
+    }
+
     /** Special message type for document replacement approvals. */
     private static class ApprovalMessage extends ChatMessage {
         final String explanation;
-        final String replacementMarkdown;
+        final String replacementMarkdown; // full replacement or null if using diff
+        final String diff; // unified diff or null if using full replacement
 
-        ApprovalMessage(String explanation, String replacementMarkdown) {
+        ApprovalMessage(String explanation, String replacementMarkdown, String diff) {
             super("assistant", explanation.isEmpty()
-                ? "Here's the updated document. Review and accept or reject the changes."
+                ? (diff != null ? "Here are the proposed changes. Review and accept or reject."
+                    : "Here's the updated document. Review and accept or reject the changes.")
                 : explanation);
             this.explanation = explanation;
             this.replacementMarkdown = replacementMarkdown;
+            this.diff = diff;
             this.isApproval = true;
         }
     }
@@ -507,7 +560,7 @@ public class AIChatPanel extends JPanel {
         html.append("font-size: ").append(codeFontSize).append("pt; }");
         html.append("</style>");
         // Static styles from resource file
-        html.append("<style>").append(loadCssResource()).append("</style>");
+        html.append("<style>").append(loadCssResource(darkMode)).append("</style>");
         html.append("<script>");
         html.append("MathJax = {");
         html.append("  tex: { inlineMath: [['$','$'], ['\\\\(','\\\\)']], displayMath: [['$$','$$'], ['\\\\[','\\\\]']] },");
@@ -526,7 +579,11 @@ public class AIChatPanel extends JPanel {
         html.append("});");
         html.append("function acceptChanges(idx) { if(window.chatBridge) window.chatBridge.acceptChanges(idx); }");
         html.append("function rejectChanges(idx) { if(window.chatBridge) window.chatBridge.rejectChanges(idx); }");
-        html.append("function copyMarkdown(idx) { if(window.chatBridge) window.chatBridge.copyMarkdown(idx); }");
+        html.append("function copyMarkdown(idx) {");
+        html.append("  if(window.chatBridge) window.chatBridge.copyMarkdown(idx);");
+        html.append("  var btn = event.currentTarget;");
+        html.append("  btn.innerHTML = '<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 8.5L6.5 12L13 4\"/></svg>';");
+        html.append("}");
         html.append("</script>");
         html.append("</head><body>");
 
@@ -628,8 +685,9 @@ public class AIChatPanel extends JPanel {
         return "";
     }
 
-    private static String loadCssResource() {
-        try (var is = AIChatPanel.class.getResourceAsStream("/ai_chat.css")) {
+    private static String loadCssResource(boolean dark) {
+        String path = dark ? "/ai_chat_dark.css" : "/ai_chat.css";
+        try (var is = AIChatPanel.class.getResourceAsStream(path)) {
             if (is != null) {
                 return new String(is.readAllBytes(), StandardCharsets.UTF_8);
             }

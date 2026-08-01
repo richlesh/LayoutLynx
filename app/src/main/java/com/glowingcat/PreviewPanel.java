@@ -47,10 +47,26 @@ public class PreviewPanel extends JPanel {
     /** Remembered dialog size (width, height). */
     private Dimension savedDialogSize = null;
 
+    /** Whether dark mode is active (affects injected scrollbar CSS). */
+    private boolean darkMode = false;
+
     /** CSS injected into every page to disable text selection and style links as inert. */
     private static final String NO_SELECT_CSS =
         "* { -webkit-user-select: none !important; user-select: none !important; cursor: crosshair !important; }" +
         " a { pointer-events: auto !important; cursor: crosshair !important; }";
+
+    private static final String SCROLLBAR_CSS_LIGHT =
+        "::-webkit-scrollbar { width: 14px !important; height: 14px !important; }" +
+        "::-webkit-scrollbar-track { background: #f0f0f0 !important; }" +
+        "::-webkit-scrollbar-thumb { background: #c0c0c0 !important; border-radius: 7px !important; }" +
+        "::-webkit-scrollbar-thumb:hover { background: #a0a0a0 !important; }";
+
+    private static final String SCROLLBAR_CSS_DARK =
+        "::-webkit-scrollbar { width: 14px !important; height: 14px !important; }" +
+        "::-webkit-scrollbar-track { background: #1e1e1e !important; }" +
+        "::-webkit-scrollbar-thumb { background: #555 !important; border-radius: 7px !important; }" +
+        "::-webkit-scrollbar-thumb:hover { background: #777 !important; }" +
+        "html { background: #1e1e1e !important; color-scheme: dark !important; }";
 
     /**
      * JavaScript helper function (as a string) that builds a sourceMap for an element
@@ -291,9 +307,10 @@ public class PreviewPanel extends JPanel {
      * and disables all hyperlink navigation so clicks trigger the computed styles dialog.
      */
     private void injectNoSelectStyle() {
+        String scrollbarCss = darkMode ? SCROLLBAR_CSS_DARK : SCROLLBAR_CSS_LIGHT;
         String script =
             "var s = document.createElement('style');" +
-            "s.textContent = '" + NO_SELECT_CSS.replace("'", "\\'") + "';" +
+            "s.textContent = '" + NO_SELECT_CSS.replace("'", "\\'") + " " + scrollbarCss.replace("'", "\\'") + "';" +
             "document.head.appendChild(s);" +
             // Prevent all link clicks from navigating
             "document.addEventListener('click', function(e) {" +
@@ -301,6 +318,29 @@ public class PreviewPanel extends JPanel {
             "  if (target) { e.preventDefault(); e.stopPropagation(); }" +
             "}, true);";
         webEngine.executeScript(script);
+    }
+
+    /** Set dark mode and re-inject scrollbar styles on next page load. */
+    public void setDarkMode(boolean dark) {
+        this.darkMode = dark;
+        // Re-inject styles into the current page immediately
+        javafx.application.Platform.runLater(() -> {
+            if (webEngine != null) {
+                try {
+                    String scrollbarCss = dark ? SCROLLBAR_CSS_DARK : SCROLLBAR_CSS_LIGHT;
+                    String script =
+                        "var existing = document.getElementById('ll-scrollbar-css');" +
+                        "if (existing) existing.remove();" +
+                        "var s = document.createElement('style');" +
+                        "s.id = 'll-scrollbar-css';" +
+                        "s.textContent = '" + scrollbarCss.replace("'", "\\'") + "';" +
+                        "document.head.appendChild(s);";
+                    webEngine.executeScript(script);
+                } catch (Exception e) {
+                    // Page may not be loaded yet
+                }
+            }
+        });
     }
 
     /**
@@ -478,7 +518,22 @@ public class PreviewPanel extends JPanel {
         } else {
             processed = htmlContent;
         }
-        final String finalHtml = processed;
+        // Inject dark-mode scrollbar/background CSS directly into the HTML so the
+        // page renders with a dark background immediately, without waiting for the
+        // SUCCEEDED callback (which would cause a brief white flash).
+        String htmlToLoad = processed;
+        if (darkMode) {
+            String darkStyle = "<style id=\"ll-scrollbar-css\">" + SCROLLBAR_CSS_DARK + "</style>";
+            // Insert before </head> if present, otherwise prepend
+            int headClose = htmlToLoad.toLowerCase().indexOf("</head>");
+            if (headClose >= 0) {
+                htmlToLoad = htmlToLoad.substring(0, headClose) + darkStyle + htmlToLoad.substring(headClose);
+            } else {
+                htmlToLoad = darkStyle + htmlToLoad;
+            }
+        }
+
+        final String finalHtml = htmlToLoad;
         final File finalHtmlFile = htmlFile;
 
         Platform.runLater(() -> {

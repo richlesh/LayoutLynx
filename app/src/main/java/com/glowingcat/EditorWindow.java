@@ -61,6 +61,7 @@ public class EditorWindow {
     private JToggleButton previewToggle;
     private JToggleButton aiToggle;
     private JToggleButton hiddenCharsToggle;
+    private JToggleButton darkModeToggle;
     private boolean previewVisible = true;
     private boolean aiVisible = true;
     private boolean hiddenCharsVisible = false;
@@ -384,6 +385,30 @@ public class EditorWindow {
                 windowMenu.add(zoomItem);
                 windowMenu.addSeparator();
 
+                JMenuItem prevItem = new JMenuItem("Previous");
+                prevItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE, shortcutMask | KeyEvent.SHIFT_DOWN_MASK));
+                prevItem.addActionListener(ev -> switchWindow(-1));
+                prevItem.setEnabled(openInstances.size() > 1);
+                windowMenu.add(prevItem);
+
+                JMenuItem nextItem = new JMenuItem("Next");
+                nextItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE, shortcutMask));
+                nextItem.addActionListener(ev -> switchWindow(1));
+                nextItem.setEnabled(openInstances.size() > 1);
+                windowMenu.add(nextItem);
+                windowMenu.addSeparator();
+
+                JMenuItem cascadeItem = new JMenuItem("Cascade All");
+                cascadeItem.addActionListener(ev -> cascadeWindows());
+                cascadeItem.setEnabled(openInstances.size() > 1);
+                windowMenu.add(cascadeItem);
+
+                JMenuItem tileItem = new JMenuItem("Tile All");
+                tileItem.addActionListener(ev -> tileWindows());
+                tileItem.setEnabled(openInstances.size() > 1);
+                windowMenu.add(tileItem);
+                windowMenu.addSeparator();
+
                 for (EditorWindow instance : openInstances) {
                     String title = instance.frame.getTitle();
                     JCheckBoxMenuItem windowItem = new JCheckBoxMenuItem(title);
@@ -550,7 +575,7 @@ public class EditorWindow {
         // --- Toolbar ---
         JPanel toolbar = new JPanel(new BorderLayout());
         toolbar.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(0, 0, 1, 0, Color.LIGHT_GRAY),
+            BorderFactory.createMatteBorder(0, 0, 1, 0, UIManager.getColor("Separator.foreground")),
             BorderFactory.createEmptyBorder(4, 8, 4, 8)
         ));
 
@@ -626,6 +651,50 @@ public class EditorWindow {
         aiToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
         aiToggle.addActionListener(e -> toggleAI());
         togglePanel.add(aiToggle);
+
+        // Dark mode toggle button (moon/sun) — rightmost
+        darkModeToggle = new JToggleButton();
+        darkModeToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
+        darkModeToggle.setToolTipText("Toggle Dark Mode");
+        darkModeToggle.setSelected(preferences.isDarkMode());
+        darkModeToggle.setIcon(new Icon() {
+            @Override public void paintIcon(Component c, Graphics g, int x, int y) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(c.getForeground());
+                if (darkModeToggle.isSelected()) {
+                    // Sun icon (switch to light) — yellow
+                    g2.setColor(new Color(255, 200, 0));
+                    int cx = x + 10, cy = y + 10;
+                    g2.fillOval(cx - 4, cy - 4, 8, 8);
+                    g2.setStroke(new BasicStroke(1.5f));
+                    for (int i = 0; i < 8; i++) {
+                        double angle = Math.toRadians(i * 45);
+                        int x1 = cx + (int)(6 * Math.cos(angle));
+                        int y1 = cy + (int)(6 * Math.sin(angle));
+                        int x2 = cx + (int)(8 * Math.cos(angle));
+                        int y2 = cy + (int)(8 * Math.sin(angle));
+                        g2.drawLine(x1, y1, x2, y2);
+                    }
+                } else {
+                    // Crescent moon icon (switch to dark)
+                    g2.fillOval(x + 5, y + 3, 12, 12);
+                    g2.setColor(darkModeToggle.getBackground() != null ? darkModeToggle.getBackground() : c.getBackground());
+                    g2.fillOval(x + 9, y + 2, 10, 10);
+                }
+                g2.dispose();
+            }
+            @Override public int getIconWidth() { return 20; }
+            @Override public int getIconHeight() { return 20; }
+        });
+        darkModeToggle.setFocusPainted(false);
+        darkModeToggle.setBorderPainted(false);
+        darkModeToggle.setContentAreaFilled(false);
+        darkModeToggle.setOpaque(false);
+        darkModeToggle.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        darkModeToggle.setPreferredSize(new Dimension(28, 28));
+        darkModeToggle.addActionListener(e -> toggleDarkMode());
+        togglePanel.add(darkModeToggle);
 
         toolbar.add(togglePanel, BorderLayout.EAST);
         frame.add(toolbar, BorderLayout.NORTH);
@@ -954,6 +1023,29 @@ public class EditorWindow {
         });
 
         openTabs.put(file, tabInfo);
+
+        // Apply current theme to new tab (editor, gutter, minimap, swatch panel)
+        boolean dark = preferences.isDarkMode();
+        Theme theme = dark ? Theme.DARK : Theme.LIGHT;
+        applyEditorTheme(textArea, dark);
+        textArea.setSelectionColor(preferences.getHighlightColorObj());
+        if (SyntaxConstants.SYNTAX_STYLE_HTML.equals(syntaxStyle)) {
+            textArea.setSecondaryLanguageBackground(1, null);
+            textArea.setSecondaryLanguageBackground(2, null);
+            textArea.setSecondaryLanguageBackground(3, null);
+        }
+        scrollPane.setBackground(theme.editorBackground);
+        scrollPane.getGutter().setBackground(theme.lineNumberBackground);
+        scrollPane.getGutter().setLineNumberColor(theme.lineNumberForeground);
+        scrollPane.getGutter().setBorderColor(theme.borderColor);
+        for (Component c : editorPanel.getComponents()) {
+            if (c instanceof MinimapPanel) {
+                c.setBackground(theme.editorBackground);
+            } else if (c instanceof ColorSwatchPanel) {
+                c.setBackground(theme.lineNumberBackground);
+            }
+        }
+
         editorTabs.addTab(file.getName(), tabInfo.tabComponent);
         SwingUtilities.invokeLater(() -> editorTabs.setSelectedComponent(tabInfo.tabComponent));
     }
@@ -1564,6 +1656,57 @@ public class EditorWindow {
         }
     }
 
+    private void switchWindow(int direction) {
+        int idx = openInstances.indexOf(this);
+        if (idx < 0 || openInstances.size() <= 1) return;
+        int next = (idx + direction + openInstances.size()) % openInstances.size();
+        EditorWindow target = openInstances.get(next);
+        target.frame.toFront();
+        target.frame.requestFocus();
+    }
+
+    private void cascadeWindows() {
+        GraphicsConfiguration gc = frame.getGraphicsConfiguration();
+        Rectangle bounds = gc.getBounds();
+        Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+        int x = bounds.x + insets.left;
+        int y = bounds.y + insets.top;
+        int availW = bounds.width - insets.left - insets.right;
+        int availH = bounds.height - insets.top - insets.bottom;
+        int w = (int)(availW * 0.75);
+        int h = (int)(availH * 0.75);
+        int offset = 25;
+        for (int i = 0; i < openInstances.size(); i++) {
+            JFrame f = openInstances.get(i).frame;
+            f.setExtendedState(Frame.NORMAL);
+            f.setBounds(x + i * offset, y + i * offset, w, h);
+            f.toFront();
+        }
+    }
+
+    private void tileWindows() {
+        int count = openInstances.size();
+        if (count == 0) return;
+        GraphicsConfiguration gc = frame.getGraphicsConfiguration();
+        Rectangle bounds = gc.getBounds();
+        Insets insets = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+        int x = bounds.x + insets.left;
+        int y = bounds.y + insets.top;
+        int availW = bounds.width - insets.left - insets.right;
+        int availH = bounds.height - insets.top - insets.bottom;
+        int cols = (int) Math.ceil(Math.sqrt(count));
+        int rows = (int) Math.ceil((double) count / cols);
+        int tileW = availW / cols;
+        int tileH = availH / rows;
+        for (int i = 0; i < count; i++) {
+            int col = i % cols;
+            int row = i / cols;
+            JFrame f = openInstances.get(i).frame;
+            f.setExtendedState(Frame.NORMAL);
+            f.setBounds(x + col * tileW, y + row * tileH, tileW, tileH);
+        }
+    }
+
     private void exitApplication() {
         for (EditorWindow instance : new ArrayList<>(openInstances)) {
             if (!instance.confirmClose()) return;
@@ -1571,8 +1714,63 @@ public class EditorWindow {
         System.exit(0);
     }
 
+    private void toggleDarkMode() {
+        boolean dark = darkModeToggle.isSelected();
+        preferences.setTheme(dark ? "dark" : "light");
+        preferences.save();
+        applyPreferences();
+    }
+
     private void applyPreferences() {
         boolean dark = preferences.isDarkMode();
+        Theme theme = dark ? Theme.DARK : Theme.LIGHT;
+
+        // Switch FlatLaf theme if needed
+        boolean isFlatLaf = UIManager.getLookAndFeel() instanceof com.formdev.flatlaf.FlatLaf;
+        boolean isFlatDark = isFlatLaf && UIManager.getLookAndFeel().getClass().getName().contains("Dark");
+        if (!isFlatLaf || dark != isFlatDark) {
+            try {
+                if (dark) {
+                    UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatDarkLaf());
+                } else {
+                    UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());
+                }
+                UIManager.put("ScrollBar.width", 16);
+                UIManager.put("ScrollBar.thumbArc", 10);
+                UIManager.put("ScrollBar.trackArc", 10);
+                if (dark) {
+                    UIManager.put("ScrollBar.track", new Color(0x1E, 0x1E, 0x1E));
+                    UIManager.put("ScrollBar.thumb", new Color(0x55, 0x55, 0x55));
+                } else {
+                    UIManager.put("ScrollBar.track", null);
+                    UIManager.put("ScrollBar.thumb", null);
+                }
+                for (EditorWindow w : openInstances) {
+                    SwingUtilities.updateComponentTreeUI(w.frame);
+                    if (w.findDialog != null) SwingUtilities.updateComponentTreeUI(w.findDialog);
+                    if (w.replaceDialog != null) SwingUtilities.updateComponentTreeUI(w.replaceDialog);
+                    // Re-apply editor themes for all windows (updateComponentTreeUI resets them)
+                    for (TabInfo tab : w.openTabs.values()) {
+                        w.applyEditorTheme(tab.textArea, dark);
+                        tab.textArea.setFont(new Font(w.preferences.getEditorFontFamily(), Font.PLAIN, w.preferences.getEditorFontSize()));
+                        tab.textArea.setSelectionColor(w.preferences.getHighlightColorObj());
+                        if (tab.scrollPane != null) {
+                            tab.scrollPane.getGutter().setBackground(theme.lineNumberBackground);
+                            tab.scrollPane.getGutter().setLineNumberColor(theme.lineNumberForeground);
+                            tab.scrollPane.getGutter().setBorderColor(theme.borderColor);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // Fall back
+            }
+        }
+
+        // Sync dark mode toggle button state
+        if (darkModeToggle != null) {
+            darkModeToggle.setSelected(dark);
+            darkModeToggle.repaint();
+        }
 
         // Apply theme to editor text areas, scrollpanes, and minimaps
         for (TabInfo tab : openTabs.values()) {
@@ -1591,232 +1789,54 @@ public class EditorWindow {
 
             // Theme the scrollpane gutter
             if (tab.scrollPane != null) {
-                tab.scrollPane.setBackground(dark ? new Color(50, 50, 50) : Color.WHITE);
-                tab.scrollPane.getGutter().setBackground(dark ? new Color(50, 50, 50) : new Color(240, 240, 240));
-                tab.scrollPane.getGutter().setLineNumberColor(dark ? new Color(130, 130, 130) : Color.GRAY);
-                tab.scrollPane.getGutter().setBorderColor(dark ? new Color(60, 60, 60) : new Color(200, 200, 200));
+                tab.scrollPane.setBackground(theme.editorBackground);
+                tab.scrollPane.getGutter().setBackground(theme.lineNumberBackground);
+                tab.scrollPane.getGutter().setLineNumberColor(theme.lineNumberForeground);
+                tab.scrollPane.getGutter().setBorderColor(theme.borderColor);
             }
 
             // Theme minimap and color swatch panels within the tab component
             if (tab.tabComponent instanceof JPanel) {
                 for (Component c : ((JPanel) tab.tabComponent).getComponents()) {
                     if (c instanceof MinimapPanel) {
-                        c.setBackground(dark ? new Color(30, 30, 30) : new Color(240, 240, 240));
+                        c.setBackground(theme.editorBackground);
                         c.repaint();
                     } else if (c instanceof ColorSwatchPanel) {
-                        c.setBackground(dark ? new Color(50, 50, 50) : new Color(240, 240, 240));
+                        c.setBackground(theme.lineNumberBackground);
                     }
                 }
             }
-        }
-
-        // Apply theme to UI chrome
-        Color bgColor = dark ? new Color(43, 43, 43) : UIManager.getColor("Panel.background");
-        Color fgColor = dark ? new Color(187, 187, 187) : UIManager.getColor("Panel.foreground");
-        Color darkBg = new Color(43, 43, 43);
-        Color darkBgAlt = new Color(50, 50, 50);
-        Color darkBorder = new Color(60, 60, 60);
-
-        // Set global UI defaults for scrollbars and controls in dark mode
-        if (dark) {
-            UIManager.put("ScrollBar.thumb", new Color(80, 80, 80));
-            UIManager.put("ScrollBar.track", darkBg);
-            UIManager.put("ScrollBar.thumbDarkShadow", darkBorder);
-            UIManager.put("ScrollBar.thumbHighlight", new Color(90, 90, 90));
-            UIManager.put("ScrollBar.thumbShadow", new Color(60, 60, 60));
-            UIManager.put("SplitPane.background", darkBg);
-            UIManager.put("TabbedPane.background", darkBg);
-            UIManager.put("TabbedPane.foreground", fgColor);
-            UIManager.put("Panel.background", darkBg);
-            UIManager.put("Panel.foreground", fgColor);
-        } else {
-            // Reset to system defaults
-            UIManager.put("ScrollBar.thumb", null);
-            UIManager.put("ScrollBar.track", null);
-            UIManager.put("ScrollBar.thumbDarkShadow", null);
-            UIManager.put("ScrollBar.thumbHighlight", null);
-            UIManager.put("ScrollBar.thumbShadow", null);
-            UIManager.put("SplitPane.background", null);
-            UIManager.put("TabbedPane.background", null);
-            UIManager.put("TabbedPane.foreground", null);
-            UIManager.put("Panel.background", null);
-            UIManager.put("Panel.foreground", null);
-        }
-
-        // Frame and content pane
-        frame.getContentPane().setBackground(bgColor);
-
-        // Toolbar
-        Component toolbar = ((BorderLayout) frame.getContentPane().getLayout()).getLayoutComponent(BorderLayout.NORTH);
-        if (toolbar != null) {
-            toolbar.setBackground(bgColor);
-            toolbar.setForeground(fgColor);
-            if (toolbar instanceof JPanel) {
-                for (Component c : ((JPanel) toolbar).getComponents()) {
-                    c.setBackground(bgColor);
-                    c.setForeground(fgColor);
-                    if (c instanceof JPanel) {
-                        for (Component cc : ((JPanel) c).getComponents()) {
-                            if (cc instanceof JToggleButton) {
-                                // Don't override toggle button colors (they have active state)
-                            } else {
-                                cc.setForeground(fgColor);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // File path label
-        if (filePathLabel != null) {
-            filePathLabel.setForeground(fgColor);
         }
 
         // File tree
         if (fileTree != null) {
-            fileTree.setBackground(dark ? darkBgAlt : Color.WHITE);
-            fileTree.setForeground(fgColor);
-            // Update tree cell renderer colors
+            fileTree.setBackground(dark ? theme.panelBackground : Color.WHITE);
+            fileTree.setForeground(theme.panelForeground);
             javax.swing.tree.DefaultTreeCellRenderer renderer =
                 (javax.swing.tree.DefaultTreeCellRenderer) fileTree.getCellRenderer();
-            renderer.setBackgroundNonSelectionColor(dark ? darkBgAlt : Color.WHITE);
-            renderer.setTextNonSelectionColor(fgColor);
+            renderer.setBackgroundNonSelectionColor(dark ? theme.panelBackground : Color.WHITE);
+            renderer.setTextNonSelectionColor(theme.panelForeground);
             renderer.setBackgroundSelectionColor(dark ? new Color(70, 70, 100) : UIManager.getColor("Tree.selectionBackground"));
             renderer.setTextSelectionColor(dark ? Color.WHITE : UIManager.getColor("Tree.selectionForeground"));
-            fileTree.getParent().setBackground(dark ? darkBgAlt : Color.WHITE);
-        }
-
-        // Tabbed pane
-        if (editorTabs != null) {
-            editorTabs.setBackground(bgColor);
-            editorTabs.setForeground(fgColor);
-        }
-
-        // Split panes
-        if (treeEditorSplit != null) {
-            treeEditorSplit.setBackground(bgColor);
-            treeEditorSplit.setBorder(null);
-        }
-        if (editorPreviewSplit != null) {
-            editorPreviewSplit.setBackground(bgColor);
-            editorPreviewSplit.setBorder(null);
-        }
-        if (mainSplit != null) {
-            mainSplit.setBackground(bgColor);
-            mainSplit.setBorder(null);
-        }
-
-        // Preview panel
-        if (previewPanel != null) {
-            previewPanel.setBackground(bgColor);
-            // Update breakpoint toolbar buttons
-            for (Component c : previewPanel.getComponents()) {
-                if (c instanceof JPanel) {
-                    c.setBackground(bgColor);
-                    c.setForeground(fgColor);
-                    for (Component cc : ((JPanel) c).getComponents()) {
-                        if (cc instanceof JLabel) cc.setForeground(fgColor);
-                        if (cc instanceof JToggleButton) {
-                            JToggleButton btn = (JToggleButton) cc;
-                            btn.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
-                            btn.setForeground(fgColor);
-                            btn.setOpaque(true);
-                            if (!btn.isSelected()) {
-                                btn.setBackground(bgColor);
-                            }
-                        }
-                    }
-                }
+            if (fileTree.getParent() != null) {
+                fileTree.getParent().setBackground(dark ? theme.panelBackground : Color.WHITE);
             }
+        }
+
+        // Dark mode toggle icon repaint
+        if (darkModeToggle != null) {
+            darkModeToggle.repaint();
+        }
+
+        // Preview panel — inject dark/light scrollbar CSS into WebView
+        if (previewPanel != null) {
+            previewPanel.setDarkMode(dark);
         }
 
         // AI chat panel
         if (aiChatPanel != null) {
+            aiChatPanel.setDarkMode(dark);
             aiChatPanel.updateFont();
-        }
-
-        // Update all scrollbars in the frame (this resets component UIs to system LAF)
-        SwingUtilities.updateComponentTreeUI(frame);
-
-        // Re-apply custom tree cell renderer (updateComponentTreeUI may reset it)
-        if (fileTree != null) {
-            fileTree.setCellRenderer(new javax.swing.tree.DefaultTreeCellRenderer() {
-                @Override
-                public Component getTreeCellRendererComponent(JTree tree, Object value, boolean sel,
-                        boolean expanded, boolean leaf, int row, boolean hasFocus) {
-                    super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
-                    setIcon(getLeafIcon());
-                    return this;
-                }
-            });
-            // Re-apply dark mode colors to the new renderer
-            javax.swing.tree.DefaultTreeCellRenderer renderer =
-                (javax.swing.tree.DefaultTreeCellRenderer) fileTree.getCellRenderer();
-            renderer.setBackgroundNonSelectionColor(dark ? darkBgAlt : Color.WHITE);
-            renderer.setTextNonSelectionColor(fgColor);
-            renderer.setBackgroundSelectionColor(dark ? new Color(70, 70, 100) : UIManager.getColor("Tree.selectionBackground"));
-            renderer.setTextSelectionColor(dark ? Color.WHITE : UIManager.getColor("Tree.selectionForeground"));
-        }
-
-        // Re-apply BasicToggleButtonUI AFTER updateComponentTreeUI since it resets to Aqua
-        Color btnHighlight = preferences.getButtonHighlightColorObj();
-        if (hiddenCharsToggle != null) {
-            hiddenCharsToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
-            hiddenCharsToggle.setForeground(fgColor);
-            if (hiddenCharsVisible) {
-                hiddenCharsToggle.setBackground(btnHighlight);
-                hiddenCharsToggle.setContentAreaFilled(true);
-                hiddenCharsToggle.setOpaque(true);
-            }
-        }
-        if (previewToggle != null) {
-            previewToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
-            previewToggle.setForeground(fgColor);
-            if (previewVisible) {
-                previewToggle.setBackground(btnHighlight);
-                previewToggle.setContentAreaFilled(true);
-                previewToggle.setOpaque(true);
-            }
-        }
-        if (aiToggle != null) {
-            aiToggle.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
-            aiToggle.setForeground(fgColor);
-            if (aiVisible) {
-                aiToggle.setBackground(btnHighlight);
-                aiToggle.setContentAreaFilled(true);
-                aiToggle.setOpaque(true);
-            }
-        }
-
-        // Re-apply to responsive breakpoint buttons
-        if (previewPanel != null) {
-            Color selectedColor = preferences.getButtonHighlightColorObj();
-            Color unselectedBg = dark ? new Color(60, 60, 60) : UIManager.getColor("Button.background");
-            for (Component c : previewPanel.getComponents()) {
-                if (c instanceof JPanel) {
-                    for (Component cc : ((JPanel) c).getComponents()) {
-                        if (cc instanceof JToggleButton) {
-                            JToggleButton btn = (JToggleButton) cc;
-                            btn.setUI(new javax.swing.plaf.basic.BasicToggleButtonUI());
-                            btn.setForeground(fgColor);
-                            btn.setOpaque(true);
-                            btn.setContentAreaFilled(true);
-                            btn.setBackground(btn.isSelected() ? selectedColor : unselectedBg);
-                            // Remove ALL existing item listeners (we'll re-add ours)
-                            for (ItemListener il : btn.getItemListeners()) {
-                                btn.removeItemListener(il);
-                            }
-                            // Use preferences reference so color is always current
-                            btn.addItemListener(e -> {
-                                Color sel = preferences.getButtonHighlightColorObj();
-                                Color unsel = preferences.isDarkMode() ? new Color(60, 60, 60) : UIManager.getColor("Button.background");
-                                btn.setBackground(btn.isSelected() ? sel : unsel);
-                            });
-                        }
-                    }
-                }
-            }
         }
 
         frame.repaint();
@@ -1826,6 +1846,7 @@ public class EditorWindow {
      * Applies light or dark theme to an RSyntaxTextArea.
      */
     private void applyEditorTheme(RSyntaxTextArea textArea, boolean dark) {
+        Theme appTheme = dark ? Theme.DARK : Theme.LIGHT;
         if (dark) {
             try {
                 org.fife.ui.rsyntaxtextarea.Theme theme =
@@ -1834,7 +1855,6 @@ public class EditorWindow {
                 theme.apply(textArea);
             } catch (Exception e) {
                 // Fallback: manually set dark colors
-                textArea.setBackground(new Color(43, 43, 43));
                 textArea.setForeground(new Color(187, 187, 187));
                 textArea.setCurrentLineHighlightColor(new Color(50, 50, 50));
                 textArea.setCaretColor(Color.WHITE);
@@ -1847,12 +1867,13 @@ public class EditorWindow {
                 theme.apply(textArea);
             } catch (Exception e) {
                 // Fallback: standard light colors
-                textArea.setBackground(Color.WHITE);
                 textArea.setForeground(Color.BLACK);
                 textArea.setCurrentLineHighlightColor(new Color(232, 242, 254));
                 textArea.setCaretColor(Color.BLACK);
             }
         }
+        // Override background to match app theme
+        textArea.setBackground(appTheme.editorBackground);
         // Re-apply user's font after theme (theme may override it)
         textArea.setFont(new Font(preferences.getEditorFontFamily(), Font.PLAIN, preferences.getEditorFontSize()));
     }

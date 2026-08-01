@@ -34,17 +34,31 @@ public class Main {
     public static void main(String[] args) {
         System.setProperty("apple.laf.useScreenMenuBar", "true");
         System.setProperty("apple.awt.application.name", "LayoutLynx");
+
+        // Use FlatLaf — load light or dark based on saved preference
+        Preferences prefs = Preferences.load();
         try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            if (prefs.isDarkMode()) {
+                UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatDarkLaf());
+            } else {
+                UIManager.setLookAndFeel(new com.formdev.flatlaf.FlatLightLaf());
+            }
         } catch (Exception e) {
-            // Fall back to default cross-platform L&F
+            try {
+                UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+            } catch (Exception ex) {
+                // Fall back to default
+            }
         }
 
-        // Remove extra left padding in Windows menus (reserved for icons/checkmarks)
-        UIManager.put("MenuItem.checkIconGap", 0);
-        UIManager.put("MenuItem.afterCheckIconGap", 0);
-        UIManager.put("MenuItem.checkIcon", null);
-        UIManager.put("MenuItem.minimumTextOffset", 0);
+        // Match scroll bar width to WebView scrollbars with rounded thumbs
+        UIManager.put("ScrollBar.width", 16);
+        UIManager.put("ScrollBar.thumbArc", 10);
+        UIManager.put("ScrollBar.trackArc", 10);
+        if (prefs.isDarkMode()) {
+            UIManager.put("ScrollBar.track", new java.awt.Color(0x1E, 0x1E, 0x1E));
+            UIManager.put("ScrollBar.thumb", new java.awt.Color(0x55, 0x55, 0x55));
+        }
 
         // Initialize JavaFX toolkit and prevent it from exiting when windows close
         new JFXPanel();
@@ -89,8 +103,8 @@ public class Main {
         // Open file from command-line argument, or create empty window
         SwingUtilities.invokeLater(() -> {
             // Show splash screen if not licensed
-            Preferences prefs = Preferences.load();
-            if (!LicenseDialog.isLicensed(prefs)) {
+            Preferences startupPrefs = Preferences.load();
+            if (!LicenseDialog.isLicensed(startupPrefs)) {
                 SplashScreen.show();
             }
 
