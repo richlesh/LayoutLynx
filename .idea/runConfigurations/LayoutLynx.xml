@@ -2,7 +2,7 @@
   <configuration default="false" name="LayoutLynx" type="Application" factoryName="Application">
     <option name="MAIN_CLASS_NAME" value="com.glowingcat.Main" />
     <module name="app" />
-    <option name="VM_PARAMETERS" value="-Dapple.laf.useScreenMenuBar=true" />
+    <option name="VM_PARAMETERS" value="--enable-native-access=ALL-UNNAMED --module-path $MAVEN_REPOSITORY$/org/openjfx/javafx-base/24/javafx-base-24-mac-aarch64.jar:$MAVEN_REPOSITORY$/org/openjfx/javafx-controls/24/javafx-controls-24-mac-aarch64.jar:$MAVEN_REPOSITORY$/org/openjfx/javafx-graphics/24/javafx-graphics-24-mac-aarch64.jar:$MAVEN_REPOSITORY$/org/openjfx/javafx-web/24/javafx-web-24-mac-aarch64.jar:$MAVEN_REPOSITORY$/org/openjfx/javafx-swing/24/javafx-swing-24-mac-aarch64.jar:$MAVEN_REPOSITORY$/org/openjfx/javafx-media/24/javafx-media-24-mac-aarch64.jar --add-modules=javafx.controls,javafx.web,javafx.swing" />
     <method v="2">
       <option name="Make" enabled="true" />
     </method>
