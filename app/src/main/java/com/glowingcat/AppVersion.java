@@ -15,7 +15,7 @@ public class AppVersion {
     private static final String VERSION;
 
     static {
-        String v = "1.0.0"; // fallback
+        String v = "DEVELOPMENT"; // fallback
         try (InputStream is = AppVersion.class.getResourceAsStream("/version.properties")) {
             if (is != null) {
                 Properties props = new Properties();
