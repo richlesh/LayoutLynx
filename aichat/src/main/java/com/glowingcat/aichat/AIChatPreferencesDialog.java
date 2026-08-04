@@ -36,23 +36,7 @@ public class AIChatPreferencesDialog extends JDialog {
 
     private static final Integer[] FONT_SIZES = {8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 22, 24, 28, 32, 36};
 
-    private static final String[][] VENDOR_DATA = {
-        {"Alibaba", "https://www.alibabacloud.com/help/en/model-studio/get-api-key", "https://dashscope-us.aliyuncs.com/compatible-mode/v1"},
-        {"Anthropic", "https://console.anthropic.com/settings/keys", "https://api.anthropic.com/v1"},
-        {"Cerebras", "https://cloud.cerebras.ai", "https://api.cerebras.ai/v1"},
-        {"DeepSeek", "https://platform.deepseek.com/api_keys", "https://api.deepseek.com/v1"},
-        {"Generic", "", ""},
-        {"Generic OpenAI API", "", ""},
-        {"Google", "https://aistudio.google.com/apikey", "https://generativelanguage.googleapis.com/v1beta/openai"},
-        {"Groq", "https://console.groq.com/keys", "https://api.groq.com/openai/v1"},
-        {"Meta", "https://developer.meta.com/ai/", "https://api.meta.ai/v1"},
-        {"Mistral", "https://console.mistral.ai/api-keys", "https://api.mistral.ai/v1"},
-        {"Moonshot AI", "https://platform.kimi.ai", "https://api.moonshot.ai/v1"},
-        {"Ollama", "https://ollama.com", "http://localhost:11434/v1"},
-        {"OpenAI", "https://platform.openai.com/api-keys", "https://api.openai.com/v1"},
-        {"Perplexity", "https://www.perplexity.ai/settings/api", "https://api.perplexity.ai"},
-        {"xAI", "https://console.x.ai", "https://api.x.ai/v1"},
-    };
+    private static final List<VendorRegistry.VendorInfo> VENDORS = VendorRegistry.getVendors();
 
     public AIChatPreferencesDialog(Window owner, AIChatPreferences prefs) {
         this(owner, prefs, null);
@@ -65,13 +49,13 @@ public class AIChatPreferencesDialog extends JDialog {
                 .getAvailableFontFamilyNames();
 
         // Initialize LLM combos
-        String[] vendorNames = new String[VENDOR_DATA.length];
-        for (int i = 0; i < VENDOR_DATA.length; i++) vendorNames[i] = VENDOR_DATA[i][0];
+        String[] vendorNames = VendorRegistry.getVendorNames();
         llmVendorCombo = new JComboBox<>(vendorNames);
         if (prefs.getLlmVendor() != null) llmVendorCombo.setSelectedItem(prefs.getLlmVendor());
 
         llmModelCombo = new JComboBox<>();
         llmModelCombo.setEditable(true);
+        llmModelCombo.setMinimumSize(new Dimension(200, llmModelCombo.getPreferredSize().height));
 
         llmApiKeyField = new JPasswordField(prefs.getLlmApiKey() != null ? prefs.getLlmApiKey() : "", 20);
 
@@ -129,7 +113,7 @@ public class AIChatPreferencesDialog extends JDialog {
             String apiKey = new String(llmApiKeyField.getPassword()).trim();
 
             // Handle Generic (YAML-configured) vendor separately
-            if ("Generic".equals(VENDOR_DATA[vi][0])) {
+            if ("Generic".equals(VENDORS.get(vi).name())) {
                 llmModelCombo.removeAllItems();
                 new Thread(() -> {
                     try {
@@ -147,8 +131,8 @@ public class AIChatPreferencesDialog extends JDialog {
                 return;
             }
 
-            String resolvedUrl = VENDOR_DATA[vi][2];
-            if ("Generic OpenAI API".equals(VENDOR_DATA[vi][0])) {
+            String resolvedUrl = VENDORS.get(vi).baseUrl();
+            if ("Generic OpenAI API".equals(VENDORS.get(vi).name())) {
                 resolvedUrl = llmEndpointField.getText().trim();
                 if (resolvedUrl.isEmpty()) {
                     llmModelCombo.removeAllItems();
@@ -158,18 +142,18 @@ public class AIChatPreferencesDialog extends JDialog {
             }
             final String baseUrl = resolvedUrl;
             llmModelCombo.removeAllItems();
-            if (apiKey.isEmpty() && !"Ollama".equals(VENDOR_DATA[vi][0]) && !"Generic OpenAI API".equals(VENDOR_DATA[vi][0])) {
+            if (apiKey.isEmpty() && !"Ollama".equals(VENDORS.get(vi).name()) && !"Generic OpenAI API".equals(VENDORS.get(vi).name())) {
                 return;
             }
             new Thread(() -> {
                 try {
-                    String modelsUrl = "Perplexity".equals(VENDOR_DATA[vi][0])
+                    String modelsUrl = "Perplexity".equals(VENDORS.get(vi).name())
                         ? baseUrl + "/v1/models" : baseUrl + "/models";
                     HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
                         .uri(URI.create(modelsUrl))
                         .header("Content-Type", "application/json")
                         .GET();
-                    if ("Anthropic".equals(VENDOR_DATA[vi][0])) {
+                    if ("Anthropic".equals(VENDORS.get(vi).name())) {
                         reqBuilder.header("x-api-key", apiKey);
                         reqBuilder.header("anthropic-version", "2023-06-01");
                     } else if (!apiKey.isEmpty()) {
@@ -182,7 +166,7 @@ public class AIChatPreferencesDialog extends JDialog {
                     Matcher m = Pattern.compile("\"id\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
                     while (m.find()) {
                         String id = m.group(1);
-                        if ("Perplexity".equals(VENDOR_DATA[vi][0]) && id.contains("/")) {
+                        if ("Perplexity".equals(VENDORS.get(vi).name()) && id.contains("/")) {
                             id = id.substring(id.indexOf('/') + 1);
                         }
                         models.add(id);
@@ -285,7 +269,7 @@ public class AIChatPreferencesDialog extends JDialog {
         apiKeyLink.addMouseListener(new java.awt.event.MouseAdapter() {
             public void mouseClicked(java.awt.event.MouseEvent e) {
                 int vi = llmVendorCombo.getSelectedIndex();
-                String url = VENDOR_DATA[vi][1];
+                String url = VENDORS.get(vi).apiKeyUrl();
                 if (!url.isEmpty()) {
                     try { Desktop.getDesktop().browse(URI.create(url)); }
                     catch (Exception ignored) {}
@@ -356,6 +340,7 @@ public class AIChatPreferencesDialog extends JDialog {
         JPanel userSwatch = new JPanel();
         userSwatch.setBackground(userPromptColor[0]);
         userSwatch.setPreferredSize(new Dimension(60, 24));
+        userSwatch.setMinimumSize(new Dimension(60, 24));
         userSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
         userSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         userSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -369,6 +354,7 @@ public class AIChatPreferencesDialog extends JDialog {
         JPanel userTextSwatch = new JPanel();
         userTextSwatch.setBackground(userTextColor[0]);
         userTextSwatch.setPreferredSize(new Dimension(60, 24));
+        userTextSwatch.setMinimumSize(new Dimension(60, 24));
         userTextSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
         userTextSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         userTextSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -378,7 +364,9 @@ public class AIChatPreferencesDialog extends JDialog {
             }
         });
         userColorPanel.add(userTextSwatch);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
+        Dimension userColorSize = userColorPanel.getPreferredSize();
+        userColorPanel.setMinimumSize(userColorSize);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
         panel.add(userColorPanel, gbc);
 
         gbc.gridy = ++row; gbc.gridx = 0; gbc.fill = GridBagConstraints.NONE;
@@ -388,6 +376,7 @@ public class AIChatPreferencesDialog extends JDialog {
         JPanel aiSwatch = new JPanel();
         aiSwatch.setBackground(aiResponseColor[0]);
         aiSwatch.setPreferredSize(new Dimension(60, 24));
+        aiSwatch.setMinimumSize(new Dimension(60, 24));
         aiSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
         aiSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         aiSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -401,6 +390,7 @@ public class AIChatPreferencesDialog extends JDialog {
         JPanel aiTextSwatch = new JPanel();
         aiTextSwatch.setBackground(aiTextColor[0]);
         aiTextSwatch.setPreferredSize(new Dimension(60, 24));
+        aiTextSwatch.setMinimumSize(new Dimension(60, 24));
         aiTextSwatch.setBorder(BorderFactory.createLineBorder(Color.DARK_GRAY));
         aiTextSwatch.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         aiTextSwatch.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -410,7 +400,9 @@ public class AIChatPreferencesDialog extends JDialog {
             }
         });
         aiColorPanel.add(aiTextSwatch);
-        gbc.gridx = 1; gbc.fill = GridBagConstraints.NONE;
+        Dimension aiColorSize = aiColorPanel.getPreferredSize();
+        aiColorPanel.setMinimumSize(aiColorSize);
+        gbc.gridx = 1; gbc.fill = GridBagConstraints.HORIZONTAL;
         panel.add(aiColorPanel, gbc);
 
         // Vertical glue to push content to top

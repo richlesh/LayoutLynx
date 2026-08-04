@@ -8,6 +8,8 @@ import java.awt.*;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -43,17 +45,17 @@ public class AIChatPanel extends JPanel {
     private final HtmlRenderer mdRenderer;
     private final String humanIconDataUri;
     private final String aiIconDataUri;
+    private final String humanIconFallbackUrl;
+    private final String aiIconFallbackUrl;
 
-    // WebView rendering
-    private javafx.embed.swing.JFXPanel jfxPanel;
-    private javafx.scene.web.WebEngine webEngine;
+    // WebView rendering (loaded via WebViewHelper to avoid class-loading JavaFX when unavailable)
+    private Object webViewHelper; // WebViewHelper instance
     private boolean useWebView = false;
-    private boolean webViewReady = false;
     // Strong reference to prevent GC of the JavaScript bridge object
     private ChatBridge chatBridge;
 
     // Fallback rendering
-    private JEditorPane fallbackPane;
+    private JPanel fallbackChatPanel;
     private JScrollPane fallbackScroll;
 
     private volatile Thread currentThread;
@@ -62,11 +64,14 @@ public class AIChatPanel extends JPanel {
     private LLMClient llmClient;
     private Runnable promptNagCallback;
     private boolean darkMode = false;
+    private final List<ContextProvider> contextProviders;
+    private final DocumentRetriever retriever;
 
     /** Internal chat message record. */
     private static class ChatMessage {
         final String role; // "user" or "assistant"
         final String markdown;
+        String copyContent; // if set, copy button copies this instead of markdown
         boolean accepted; // for code approval messages
         boolean rejected;
         boolean isApproval; // whether this contains a document replacement
@@ -76,6 +81,9 @@ public class AIChatPanel extends JPanel {
             this.markdown = markdown;
         }
     }
+
+    /** A labeled supplier of additional context text for the LLM. */
+    private record ContextProvider(String label, java.util.function.Supplier<String> supplier) {}
 
     /**
      * Create a builder for constructing an AIChatPanel.
@@ -93,6 +101,8 @@ public class AIChatPanel extends JPanel {
         private ChatColors chatColors;
         private LLMClient llmClient;
         private Runnable onPromptNag;
+        private DocumentRetriever documentRetriever;
+        private final List<ContextProvider> contextProviders = new ArrayList<>();
 
         private Builder() {}
 
@@ -126,6 +136,30 @@ public class AIChatPanel extends JPanel {
             return this;
         }
 
+        /**
+         * Set the document retriever for RAG-based context (optional).
+         * If not set, no RAG retrieval will be performed.
+         *
+         * @param retriever a configured DocumentRetriever instance
+         */
+        public Builder documentRetriever(DocumentRetriever retriever) {
+            this.documentRetriever = retriever;
+            return this;
+        }
+
+        /**
+         * Add an additional context provider. Each provider supplies a labeled
+         * block of text that is appended to every user message sent to the LLM.
+         * Can be called multiple times to register multiple providers.
+         *
+         * @param label    the label shown to the LLM (e.g. "Console output")
+         * @param supplier supplies the context text; may return null or empty to skip
+         */
+        public Builder contextProvider(String label, java.util.function.Supplier<String> supplier) {
+            contextProviders.add(new ContextProvider(label, supplier));
+            return this;
+        }
+
         /** Build the AIChatPanel. */
         public AIChatPanel build() {
             if (editor == null) throw new IllegalStateException("editor is required");
@@ -141,9 +175,17 @@ public class AIChatPanel extends JPanel {
         this.chatColors = builder.chatColors;
         this.llmClient = builder.llmClient;
         this.promptNagCallback = builder.onPromptNag;
+        this.contextProviders = List.copyOf(builder.contextProviders);
         this.systemPrompt = buildSystemPrompt();
         this.humanIconDataUri = loadIconAsDataUri("/human.png");
         this.aiIconDataUri = loadIconAsDataUri("/AI.png");
+        var humanUrl = AIChatPanel.class.getResource("/human.png");
+        var aiUrl = AIChatPanel.class.getResource("/AI.png");
+        this.humanIconFallbackUrl = humanUrl != null ? humanUrl.toString() : "";
+        this.aiIconFallbackUrl = aiUrl != null ? aiUrl.toString() : "";
+
+        // RAG retriever — lazily initialized on first query
+        this.retriever = builder.documentRetriever;
 
         // Set up commonmark parser for rendering AI responses
         List<Extension> extensions = List.of(
@@ -220,58 +262,175 @@ public class AIChatPanel extends JPanel {
             }
             renderChat();
         });
+
+        // Copy bundled AI vendor config files to Desktop on first run
+        installConfigToDesktop();
     }
 
     private void initChatDisplay() {
         try {
-            jfxPanel = new javafx.embed.swing.JFXPanel();
-            add(jfxPanel, BorderLayout.CENTER);
-            javafx.application.Platform.runLater(() -> {
-                try {
-                    javafx.scene.web.WebView webView = new javafx.scene.web.WebView();
-                    webEngine = webView.getEngine();
-
-                    // JavaScript-to-Java bridge for button clicks and copy
-                    chatBridge = new ChatBridge();
-                    webEngine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
-                        if (newState == javafx.concurrent.Worker.State.SUCCEEDED) {
-                            netscape.javascript.JSObject win = (netscape.javascript.JSObject) webEngine.executeScript("window");
-                            win.setMember("chatBridge", chatBridge);
-                            webViewReady = true;
-                        }
-                    });
-
-                    javafx.scene.Scene scene = new javafx.scene.Scene(webView);
-                    jfxPanel.setScene(scene);
-                    useWebView = true;
-                    renderChat();
-                } catch (Throwable t) {
-                    SwingUtilities.invokeLater(() -> {
-                        remove(jfxPanel);
-                        jfxPanel = null;
-                        useWebView = false;
-                        initFallback();
-                        revalidate();
-                        repaint();
-                    });
-                }
-            });
+            Class<?> helperClass = Class.forName("com.glowingcat.aichat.WebViewHelper");
+            chatBridge = new ChatBridge();
+            Object helper = helperClass.getDeclaredConstructor(Object.class, Runnable.class)
+                .newInstance(chatBridge, (Runnable) this::renderChat);
+            webViewHelper = helper;
+            java.awt.Component fxPanel = (java.awt.Component) helperClass.getField("fxPanel").get(helper);
+            add(fxPanel, BorderLayout.CENTER);
+            useWebView = true;
         } catch (Throwable t) {
-            if (jfxPanel != null) {
-                remove(jfxPanel);
-                jfxPanel = null;
-            }
+            webViewHelper = null;
+            useWebView = false;
             initFallback();
         }
     }
 
     private void initFallback() {
-        fallbackPane = new JEditorPane();
-        fallbackPane.setContentType("text/html");
-        fallbackPane.setEditable(false);
-        fallbackPane.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, Boolean.TRUE);
-        fallbackScroll = new JScrollPane(fallbackPane);
+        fallbackChatPanel = new JPanel();
+        fallbackChatPanel.setLayout(new BoxLayout(fallbackChatPanel, BoxLayout.Y_AXIS));
+        fallbackChatPanel.setBackground(Color.WHITE);
+        fallbackScroll = new JScrollPane(fallbackChatPanel);
+        fallbackScroll.getVerticalScrollBar().setUnitIncrement(16);
         add(fallbackScroll, BorderLayout.CENTER);
+    }
+
+    private javax.swing.Timer thinkingTimer;
+
+    private void renderFallbackChat() {
+        fallbackChatPanel.removeAll();
+        Font chatFont = new Font(aiPreferences.getAiFontFamily(), Font.PLAIN, aiPreferences.getAiFontSize());
+        Font codeFont = new Font(aiPreferences.getAiCodeFontFamily(), Font.PLAIN, aiPreferences.getAiCodeFontSize());
+        ImageIcon humanIcon = loadScaledIcon("/human.png", 24);
+        ImageIcon aiIcon = loadScaledIcon("/AI.png", 24);
+
+        for (int i = 0; i < chatMessages.size(); i++) {
+            ChatMessage msg = chatMessages.get(i);
+            JPanel row = new JPanel(new BorderLayout(6, 0));
+            row.setOpaque(false);
+            row.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+            row.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
+
+            JLabel icon = new JLabel("user".equals(msg.role) ? humanIcon : aiIcon);
+            icon.setVerticalAlignment(SwingConstants.TOP);
+            row.add(icon, BorderLayout.WEST);
+
+            JTextArea textArea = new JTextArea(msg.markdown);
+            textArea.setFont(chatFont);
+            textArea.setLineWrap(true);
+            textArea.setWrapStyleWord(true);
+            textArea.setEditable(false);
+            textArea.setOpaque(true);
+            textArea.setBackground("user".equals(msg.role) ? new Color(0xE8F5E9) : new Color(0xE3F2FD));
+            textArea.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+            row.add(textArea, BorderLayout.CENTER);
+
+            // Add Accept/Reject buttons for approval messages
+            if (msg.isApproval && !msg.accepted && !msg.rejected) {
+                final int idx = i;
+                JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+                btnPanel.setOpaque(false);
+                JButton acceptBtn = new JButton("Accept");
+                JButton rejectBtn = new JButton("Reject");
+                acceptBtn.addActionListener(e -> {
+                    if (idx < chatMessages.size()) {
+                        ChatMessage m = chatMessages.get(idx);
+                        if (m instanceof ApprovalMessage am) {
+                            if (am.diff != null) {
+                                try {
+                                    String patched = DiffApplier.apply(editor.getText(), am.diff);
+                                    editor.setText(patched);
+                                    m.accepted = true;
+                                } catch (Exception ex) {
+                                    JOptionPane.showMessageDialog(null,
+                                        "Failed to apply diff: " + ex.getMessage(),
+                                        "Diff Error", JOptionPane.ERROR_MESSAGE);
+                                    return;
+                                }
+                            } else if (am.replacementMarkdown != null) {
+                                editor.setText(am.replacementMarkdown);
+                                m.accepted = true;
+                            }
+                            renderChat();
+                        }
+                    }
+                });
+                rejectBtn.addActionListener(e -> {
+                    if (idx < chatMessages.size()) {
+                        chatMessages.get(idx).rejected = true;
+                        renderChat();
+                    }
+                });
+                btnPanel.add(acceptBtn);
+                btnPanel.add(rejectBtn);
+
+                JPanel contentPanel = new JPanel(new BorderLayout());
+                contentPanel.setOpaque(false);
+                contentPanel.add(textArea, BorderLayout.CENTER);
+                contentPanel.add(btnPanel, BorderLayout.SOUTH);
+                row.add(contentPanel, BorderLayout.CENTER);
+            } else if (msg.isApproval && msg.accepted) {
+                JPanel contentPanel = new JPanel(new BorderLayout());
+                contentPanel.setOpaque(false);
+                contentPanel.add(textArea, BorderLayout.CENTER);
+                JLabel status = new JLabel("✓ Changes accepted.");
+                status.setForeground(new Color(0x2E7D32));
+                status.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 0));
+                contentPanel.add(status, BorderLayout.SOUTH);
+                row.add(contentPanel, BorderLayout.CENTER);
+            } else if (msg.isApproval && msg.rejected) {
+                JPanel contentPanel = new JPanel(new BorderLayout());
+                contentPanel.setOpaque(false);
+                contentPanel.add(textArea, BorderLayout.CENTER);
+                JLabel status = new JLabel("✗ Changes rejected.");
+                status.setForeground(new Color(0xC62828));
+                status.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 0));
+                contentPanel.add(status, BorderLayout.SOUTH);
+                row.add(contentPanel, BorderLayout.CENTER);
+            }
+
+            fallbackChatPanel.add(row);
+        }
+
+        // Pulsing "Thinking..." indicator
+        if (pulsing) {
+            JPanel thinkingRow = new JPanel(new BorderLayout(6, 0));
+            thinkingRow.setOpaque(false);
+            thinkingRow.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+            thinkingRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+            thinkingRow.add(new JLabel(aiIcon), BorderLayout.WEST);
+            JLabel thinkingLabel = new JLabel("Thinking...");
+            thinkingLabel.setFont(chatFont.deriveFont(Font.ITALIC));
+            thinkingRow.add(thinkingLabel, BorderLayout.CENTER);
+            fallbackChatPanel.add(thinkingRow);
+
+            // Animate pulsing with a timer
+            if (thinkingTimer != null) thinkingTimer.stop();
+            thinkingTimer = new javax.swing.Timer(600, new ActionListener() {
+                private int dots = 3;
+                @Override public void actionPerformed(ActionEvent e) {
+                    dots = (dots % 3) + 1;
+                    thinkingLabel.setText("Thinking" + ".".repeat(dots));
+                }
+            });
+            thinkingTimer.start();
+        } else {
+            if (thinkingTimer != null) { thinkingTimer.stop(); thinkingTimer = null; }
+        }
+
+        fallbackChatPanel.add(Box.createVerticalGlue());
+        fallbackChatPanel.revalidate();
+        fallbackChatPanel.repaint();
+        SwingUtilities.invokeLater(() -> {
+            JScrollBar v = fallbackScroll.getVerticalScrollBar();
+            v.setValue(v.getMaximum());
+        });
+    }
+
+    private static ImageIcon loadScaledIcon(String resource, int size) {
+        var url = AIChatPanel.class.getResource(resource);
+        if (url != null) {
+            return new ImageIcon(new ImageIcon(url).getImage().getScaledInstance(size, size, java.awt.Image.SCALE_SMOOTH));
+        }
+        return null;
     }
 
     /** JavaScript bridge for WebView callbacks. */
@@ -324,6 +483,8 @@ public class AIChatPanel extends JPanel {
                     String md;
                     if (msg instanceof ApprovalMessage am) {
                         md = am.diff != null ? am.diff : am.replacementMarkdown;
+                    } else if (msg.copyContent != null) {
+                        md = msg.copyContent;
                     } else {
                         md = msg.markdown;
                     }
@@ -375,6 +536,45 @@ public class AIChatPanel extends JPanel {
         renderChat();
     }
 
+    /**
+     * Lazily initialize the RAG retriever if needed for the current vendor.
+     * Shows a progress dialog while indexing.
+     */
+    private void ensureRetrieverInitialized() {
+        if (retriever == null) return;
+        if (!retriever.needsInitialization(aiPreferences)) return;
+
+        String vendor = aiPreferences.getLlmVendor();
+        JDialog dialog = new JDialog(
+            (java.awt.Frame) SwingUtilities.getWindowAncestor(this),
+            "Indexing", true);
+        JLabel label = new JLabel("Indexing context documents for use by " + vendor + "...");
+        label.setBorder(BorderFactory.createEmptyBorder(20, 30, 20, 30));
+        JProgressBar progress = new JProgressBar();
+        progress.setIndeterminate(true);
+        JPanel panel = new JPanel(new java.awt.BorderLayout(0, 10));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        panel.add(label, java.awt.BorderLayout.NORTH);
+        panel.add(progress, java.awt.BorderLayout.CENTER);
+        dialog.setContentPane(panel);
+        dialog.pack();
+        dialog.setLocationRelativeTo(this);
+        dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+
+        // Run initialization on background thread, close dialog when done
+        new Thread(() -> {
+            try {
+                retriever.initialize(aiPreferences);
+            } catch (Exception e) {
+                // Non-fatal
+            } finally {
+                SwingUtilities.invokeLater(dialog::dispose);
+            }
+        }, "RAG-Indexer").start();
+
+        dialog.setVisible(true); // blocks until disposed
+    }
+
     private void sendMessage() {
         String text = inputArea.getText().trim();
         if (text.isEmpty()) return;
@@ -390,11 +590,43 @@ public class AIChatPanel extends JPanel {
             promptNagCallback.run();
         }
 
-        String context = "Current markdown document:\n```markdown\n" + editor.getText() + "\n```";
+        String context = "Current document:\n```\n" + editor.getText() + "\n```";
+        for (ContextProvider cp : contextProviders) {
+            String extra = cp.supplier().get();
+            if (extra != null && !extra.isEmpty()) {
+                context += "\n\n" + cp.label() + ":\n```\n" + extra + "\n```";
+            }
+        }
+
+        // Add RAG-retrieved relevant documentation chunks
+        ensureRetrieverInitialized();
+        if (retriever != null && retriever.isInitialized()) {
+            // Combine user prompt with document sample for better retrieval relevance
+            String retrievalQuery = text;
+            String docText = editor.getText();
+            if (docText != null && !docText.isEmpty()) {
+                String docSample = docText.length() > 500 ? docText.substring(0, 500) : docText;
+                retrievalQuery = text + "\n\n" + docSample;
+            }
+            List<String> relevantDocs = retriever.retrieve(retrievalQuery);
+            if (!relevantDocs.isEmpty()) {
+                context += "\n\nRelevant documentation:\n";
+                for (String doc : relevantDocs) {
+                    context += "\n---\n" + doc;
+                }
+            }
+        }
+
         if (messages.isEmpty()) {
             messages.add(Map.of("role", "system", "content", systemPrompt));
         }
-        messages.add(Map.of("role", "user", "content", context + "\n\nUser request: " + text));
+        String fullUserMessage = context + "\n\nUser request: " + text;
+        messages.add(Map.of("role", "user", "content", fullUserMessage));
+
+        // In developer mode, write the composed prompt to a file for inspection
+        if (isDeveloperMode()) {
+            writeDevFile(".glowingcat-ai-prompt.md", fullUserMessage);
+        }
 
         // Ensure we have an LLM client
         if (llmClient == null) {
@@ -410,6 +642,10 @@ public class AIChatPanel extends JPanel {
             try {
                 String response = client.chat(messages, systemPrompt);
                 messages.add(Map.of("role", "assistant", "content", response));
+                // In developer mode, write the AI response to a file for inspection
+                if (isDeveloperMode()) {
+                    writeDevFile(".glowingcat-ai-response.md", response);
+                }
                 SwingUtilities.invokeLater(() -> {
                     pulsing = false;
                     processResponse(response);
@@ -435,6 +671,50 @@ public class AIChatPanel extends JPanel {
         // Normalize line endings
         String normalized = response.replace("\r\n", "\n").replace("\r", "\n");
 
+        // Check for ```fulltext block — full source replacement applied immediately (no Accept/Reject)
+        // Support 3 or more backticks as the fence (LLMs sometimes use 4+)
+        int fulltextStart = -1;
+        int fulltextFenceLen = 0;
+        {
+            int idx = 0;
+            while (idx < normalized.length()) {
+                idx = normalized.indexOf("```", idx);
+                if (idx < 0) break;
+                int fenceStart = idx;
+                while (idx < normalized.length() && normalized.charAt(idx) == '`') idx++;
+                int fenceLen = idx - fenceStart;
+                if (normalized.startsWith("fulltext\n", idx)) {
+                    fulltextStart = fenceStart;
+                    fulltextFenceLen = fenceLen;
+                    break;
+                }
+            }
+        }
+        if (fulltextStart >= 0) {
+            int blockStart = normalized.indexOf("\n", fulltextStart) + 1;
+            String closingFence = "`".repeat(fulltextFenceLen);
+            int blockEnd = findClosingFenceExact(normalized, blockStart, closingFence);
+            if (blockEnd > blockStart) {
+                String newSource = normalized.substring(blockStart, blockEnd);
+                String explanation = normalized.substring(0, fulltextStart).trim();
+                int fenceEndPos = normalized.indexOf("\n", blockEnd + 1);
+                if (fenceEndPos < 0) fenceEndPos = blockEnd + fulltextFenceLen + 1;
+                if (fenceEndPos < normalized.length()) {
+                    String after = normalized.substring(fenceEndPos).trim();
+                    if (!after.isEmpty()) explanation += (explanation.isEmpty() ? "" : "\n") + after;
+                }
+                // Apply directly to editor
+                editor.setText(newSource);
+                // Show explanation as a normal message (or a default if none)
+                String display = explanation.isEmpty() ? "Updated the source code." : explanation;
+                ChatMessage msg = new ChatMessage("assistant", display);
+                msg.copyContent = newSource;
+                chatMessages.add(msg);
+                renderChat();
+                return;
+            }
+        }
+
         // Check for ```diff block (preferred format for changes)
         int diffStart = normalized.indexOf("```diff\n");
         if (diffStart >= 0) {
@@ -455,29 +735,7 @@ public class AIChatPanel extends JPanel {
             }
         }
 
-        // Check for ```markdown or ```md block (full replacement, for new documents)
-        int codeStart = normalized.indexOf("```markdown\n");
-        if (codeStart < 0) codeStart = normalized.indexOf("```md\n");
-        if (codeStart < 0) codeStart = normalized.indexOf("```markdown ");
-        if (codeStart < 0) codeStart = normalized.indexOf("```md ");
-
-        if (codeStart >= 0) {
-            int blockStart = normalized.indexOf("\n", codeStart) + 1;
-            int blockEnd = findClosingFence(normalized, blockStart);
-            if (blockEnd > blockStart) {
-                String newMarkdown = normalized.substring(blockStart, blockEnd);
-                String explanation = normalized.substring(0, codeStart).trim();
-                int fenceEndPos = normalized.indexOf("\n", blockEnd + 1);
-                if (fenceEndPos < 0) fenceEndPos = blockEnd + 4;
-                if (fenceEndPos < normalized.length()) {
-                    String after = normalized.substring(fenceEndPos).trim();
-                    if (!after.isEmpty()) explanation += (explanation.isEmpty() ? "" : "\n") + after;
-                }
-                chatMessages.add(new ApprovalMessage(explanation, newMarkdown, null));
-                renderChat();
-                return;
-            }
-        }
+        // No diff or fulltext block found — show as normal chat message
         ChatMessage aiMsg = new ChatMessage("assistant", response);
         chatMessages.add(aiMsg);
         renderChat();
@@ -504,6 +762,29 @@ public class AIChatPanel extends JPanel {
         return blockEnd;
     }
 
+    /** Find the closing fence matching an exact backtick sequence (e.g., ```` or `````) after a block start. */
+    private int findClosingFenceExact(String text, int blockStart, String fence) {
+        String target = "\n" + fence;
+        int searchFrom = blockStart;
+        while (searchFrom < text.length()) {
+            int candidate = text.indexOf(target, searchFrom);
+            if (candidate < 0) break;
+            int afterFence = candidate + target.length();
+            // Ensure fence is not followed by more backticks (which would mean a longer fence)
+            if (afterFence < text.length() && text.charAt(afterFence) == '`') {
+                searchFrom = afterFence;
+                continue;
+            }
+            // Ensure fence is at end of line or followed by whitespace/newline
+            if (afterFence >= text.length() || text.charAt(afterFence) == '\n'
+                    || text.substring(afterFence).trim().isEmpty()) {
+                return candidate;
+            }
+            searchFrom = afterFence;
+        }
+        return -1;
+    }
+
     /** Special message type for document replacement approvals. */
     private static class ApprovalMessage extends ChatMessage {
         final String explanation;
@@ -525,16 +806,12 @@ public class AIChatPanel extends JPanel {
     /** Render the full chat as HTML and load into WebView or fallback. */
     private void renderChat() {
         String html = buildChatHtml();
-        if (useWebView && webEngine != null) {
-            javafx.application.Platform.runLater(() -> {
-                webEngine.loadContent(html);
-            });
-        } else if (fallbackPane != null) {
-            fallbackPane.setText(html);
-            SwingUtilities.invokeLater(() -> {
-                JScrollBar v = fallbackScroll.getVerticalScrollBar();
-                v.setValue(v.getMaximum());
-            });
+        if (useWebView && webViewHelper != null) {
+            try {
+                webViewHelper.getClass().getMethod("loadContent", String.class).invoke(webViewHelper, html);
+            } catch (Exception ignored) {}
+        } else if (fallbackChatPanel != null) {
+            renderFallbackChat();
         }
     }
 
@@ -568,7 +845,11 @@ public class AIChatPanel extends JPanel {
         html.append("  svg: { fontCache: 'global' }");
         html.append("};");
         html.append("</script>");
-        html.append("<script src=\"https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js\" async></script>");
+        html.append("<style>").append(WebResources.highlightCss(darkMode)).append("</style>");
+        html.append("<script>").append(WebResources.highlightJs()).append("</script>");
+        html.append("<script>").append(WebResources.mermaidJs()).append("</script>");
+        html.append("<script>if(window.mermaid){mermaid.initialize({startOnLoad: false, theme: '").append(darkMode ? "dark" : "default").append("'});}</script>");
+        html.append("<script>").append(WebResources.mathjaxJs()).append("</script>");
         html.append("<script>");
         html.append("document.addEventListener('click', function(e) {");
         html.append("  var a = e.target.closest('a');");
@@ -584,6 +865,14 @@ public class AIChatPanel extends JPanel {
         html.append("  var btn = event.currentTarget;");
         html.append("  btn.innerHTML = '<svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 8.5L6.5 12L13 4\"/></svg>';");
         html.append("}");
+        html.append("document.addEventListener('DOMContentLoaded', function() {");
+        html.append("  if(window.mermaid){document.querySelectorAll('pre code.language-mermaid').forEach(function(el){");
+        html.append("    var pre=el.parentElement;var div=document.createElement('div');");
+        html.append("    div.className='mermaid';div.textContent=el.textContent;");
+        html.append("    pre.parentElement.replaceChild(div,pre);});");
+        html.append("  mermaid.run();}");
+        html.append("  if(window.hljs){hljs.highlightAll();}");
+        html.append("});");
         html.append("</script>");
         html.append("</head><body>");
 
@@ -592,7 +881,7 @@ public class AIChatPanel extends JPanel {
             ChatMessage msg = chatMessages.get(i);
             if ("user".equals(msg.role)) {
                 html.append("<div class=\"bubble-row\">");
-                html.append("<img class=\"bubble-icon\" src=\"").append(humanIconDataUri).append("\">");
+                html.append("<img class=\"bubble-icon\" src=\"").append(humanIconSrc()).append("\">");
                 html.append("<div class=\"bubble user-bubble bubble-content\">");
                 html.append(escapeHtml(msg.markdown));
                 html.append("</div></div>");
@@ -608,7 +897,7 @@ public class AIChatPanel extends JPanel {
                 }
 
                 html.append("<div class=\"bubble-row\">");
-                html.append("<img class=\"bubble-icon\" src=\"").append(aiIconDataUri).append("\">");
+                html.append("<img class=\"bubble-icon\" src=\"").append(aiIconSrc()).append("\">");
                 html.append("<div class=\"bubble ai-bubble bubble-content\">");
                 html.append("<button class=\"copy-btn\" onclick=\"copyMarkdown(").append(i).append(")\" title=\"Copy markdown\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"><rect x=\"5\" y=\"5\" width=\"9\" height=\"9\" rx=\"1.5\"/><path d=\"M3 11V2.5A1.5 1.5 0 0 1 4.5 1H11\"/></svg></button>");
                 html.append(renderedContent);
@@ -633,12 +922,18 @@ public class AIChatPanel extends JPanel {
 
         // Pulsing "thinking" indicator
         if (pulsing) {
-            html.append("<div class=\"thinking\"><img class=\"bubble-icon\" src=\"").append(aiIconDataUri).append("\">Thinking...</div>");
+            html.append("<div class=\"thinking\"><img class=\"bubble-icon\" src=\"").append(aiIconSrc()).append("\">Thinking...</div>");
         }
 
         // Auto-scroll to bottom
         html.append("<script>window.onload = function() { window.scrollTo(0, document.body.scrollHeight); ");
-        html.append("if(window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise(); };</script>");
+        html.append("if(window.MathJax && MathJax.typesetPromise) MathJax.typesetPromise();");
+        html.append("if(window.mermaid){document.querySelectorAll('pre code.language-mermaid').forEach(function(el){");
+        html.append("var pre=el.parentElement;var div=document.createElement('div');");
+        html.append("div.className='mermaid';div.textContent=el.textContent;");
+        html.append("pre.parentElement.replaceChild(div,pre);});");
+        html.append("mermaid.run();}");
+        html.append("};</script>");
 
         html.append("</body></html>");
         return html.toString();
@@ -672,6 +967,14 @@ public class AIChatPanel extends JPanel {
         return "You are an AI writing assistant. Help users write and improve markdown documents.";
     }
 
+    private String humanIconSrc() {
+        return useWebView ? humanIconDataUri : humanIconFallbackUrl;
+    }
+
+    private String aiIconSrc() {
+        return useWebView ? aiIconDataUri : aiIconFallbackUrl;
+    }
+
     private static String loadIconAsDataUri(String resourcePath) {
         try (var is = AIChatPanel.class.getResourceAsStream(resourcePath)) {
             if (is != null) {
@@ -695,5 +998,64 @@ public class AIChatPanel extends JPanel {
             // Fall through
         }
         return "";
+    }
+
+    /**
+     * Returns true if running from exploded class files (i.e. an IDE) rather than a packaged JAR.
+     */
+    private static boolean isDeveloperMode() {
+        var url = AIChatPanel.class.getResource("/system_prompt.md");
+        return url != null && "file".equals(url.getProtocol());
+    }
+
+    /**
+     * Write content to a file in the user's home directory (developer mode only).
+     */
+    private static void writeDevFile(String filename, String content) {
+        try {
+            java.nio.file.Path path = java.nio.file.Path.of(System.getProperty("user.home"), filename);
+            java.nio.file.Files.writeString(path, content, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            // Non-fatal — developer convenience only
+        }
+    }
+
+    /**
+     * Copy bundled config files from resources/config/ to the user's Desktop
+     * as "Generic AI Configurations" folder. Only runs once — skips if the folder already exists.
+     */
+    private static void installConfigToDesktop() {
+        try {
+            Path desktopDir = Path.of(System.getProperty("user.home"), "Desktop");
+            if (!Files.isDirectory(desktopDir)) return;
+
+            Path destDir = desktopDir.resolve("Generic AI Configurations");
+            if (Files.exists(destDir)) return; // already installed
+
+            // Read the index of config files
+            var indexStream = AIChatPanel.class.getResourceAsStream("/config/config-index.txt");
+            if (indexStream == null) return;
+
+            List<String> filenames;
+            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(indexStream, StandardCharsets.UTF_8))) {
+                filenames = reader.lines()
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
+            }
+
+            if (filenames.isEmpty()) return;
+
+            Files.createDirectories(destDir);
+            for (String filename : filenames) {
+                var resStream = AIChatPanel.class.getResourceAsStream("/config/" + filename);
+                if (resStream == null) continue;
+                try (resStream) {
+                    Files.copy(resStream, destDir.resolve(filename));
+                }
+            }
+        } catch (Exception e) {
+            // Non-fatal — best effort
+        }
     }
 }

@@ -16,10 +16,13 @@ public class AnthropicClient implements LLMClient {
 
     private final String apiKey;
     private final String model;
+    private final String baseUrl;
 
     public AnthropicClient(String apiKey, String model) {
         this.apiKey = apiKey;
         this.model = model;
+        VendorRegistry.VendorInfo info = VendorRegistry.getVendor("Anthropic");
+        this.baseUrl = (info != null && !info.baseUrl().isEmpty()) ? info.baseUrl() : "https://api.anthropic.com/v1";
     }
 
     @Override
@@ -42,7 +45,7 @@ public class AnthropicClient implements LLMClient {
         body.append("]}");
 
         HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create("https://api.anthropic.com/v1/messages"))
+            .uri(URI.create(baseUrl + "/messages"))
             .header("Content-Type", "application/json")
             .header("x-api-key", apiKey)
             .header("anthropic-version", "2023-06-01")

@@ -109,3 +109,28 @@ Models:
     ListPath: ""
     IdField: "model_id"
     DescriptionField: "short_description"
+
+# Optional: Embedding section for RAG (Retrieval-Augmented Generation).
+# If configured, the AI chat will use vector embeddings to find relevant
+# documentation chunks for each query, resulting in better context-aware responses.
+#
+# If omitted or left blank, keyword-based search is used instead (no API calls,
+# but less semantically accurate).
+#
+# The URI should point to an OpenAI-compatible /v1/embeddings endpoint.
+# The Model should be the embedding model name supported by that endpoint.
+#
+# Examples:
+#   OpenAI:        URI: https://api.openai.com/v1/embeddings
+#                  Model: text-embedding-3-small
+#   Azure OpenAI:  URI: https://YOUR_RESOURCE.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2024-06-01
+#                  Model: text-embedding-3-small
+#   Ollama:        URI: http://localhost:11434/v1/embeddings
+#                  Model: nomic-embed-text
+#   AWS Bedrock:   URI: https://bedrock-mantle.us-east-1.api.aws/v1/embeddings
+#                  Model: amazon.titan-embed-text-v2:0
+#
+
+Embedding:
+   URI: https://api.openai.com/v1/embeddings
+   Model: text-embedding-3-small

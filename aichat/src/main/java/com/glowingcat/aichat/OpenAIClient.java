@@ -29,7 +29,7 @@ public class OpenAIClient implements LLMClient {
     @Override
     public String chat(List<Map<String, String>> messages, String systemPrompt) throws Exception {
         StringBuilder body = new StringBuilder();
-        body.append("{\"model\":\"").append(model).append("\",\"max_tokens\":128000,\"messages\":[");
+        body.append("{\"model\":\"").append(model).append("\",\"max_completion_tokens\":128000,\"messages\":[");
         for (int i = 0; i < messages.size(); i++) {
             if (i > 0) body.append(",");
             body.append("{\"role\":\"").append(messages.get(i).get("role"))

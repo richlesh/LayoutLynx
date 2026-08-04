@@ -23,6 +23,7 @@ Prompt:
     }
   Response:
     ContentPath: "choices[0].message.content"
+
 Models:
   URI: https://YOUR_RESOURCE_NAME.openai.azure.com/openai/models?api-version=2024-06-01
   Method: GET
@@ -32,3 +33,7 @@ Models:
     ListPath: "data"
     IdField: "id"
     DescriptionField: "id"
+
+Embedding:
+  URI: https://YOUR_RESOURCE_NAME.openai.azure.com/openai/deployments/text-embedding-3-small/embeddings?api-version=2024-06-01
+  Model: text-embedding-3-small

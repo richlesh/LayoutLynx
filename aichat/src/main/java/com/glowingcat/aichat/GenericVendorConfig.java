@@ -33,6 +33,7 @@ public class GenericVendorConfig {
     private Map<String, Object> promptConfig;
     private Map<String, Object> modelsConfig;
     private Map<String, Object> authConfig;
+    private Map<String, Object> embeddingConfig;
 
     // Conversation GUID — generated once per session/clear
     private String conversationGuid = UUID.randomUUID().toString();
@@ -120,12 +121,14 @@ public class GenericVendorConfig {
                 promptConfig = (Map<String, Object>) root.get("Prompt");
                 modelsConfig = (Map<String, Object>) root.get("Models");
                 authConfig = (Map<String, Object>) root.get("Auth");
+                embeddingConfig = (Map<String, Object>) root.get("Embedding");
             }
         } catch (Exception e) {
             // If parsing fails, leave configs null — calls will fail gracefully
             promptConfig = null;
             modelsConfig = null;
             authConfig = null;
+            embeddingConfig = null;
         }
     }
 
@@ -153,6 +156,28 @@ public class GenericVendorConfig {
     /** Whether the configuration is valid (has at least a Prompt section). */
     public boolean isValid() {
         return promptConfig != null;
+    }
+
+    /** Returns true if embedding configuration is present with a URI and Model. */
+    public boolean hasEmbeddingConfig() {
+        if (embeddingConfig == null) return false;
+        String uri = getEmbeddingUri();
+        String model = getEmbeddingModel();
+        return uri != null && !uri.isBlank() && model != null && !model.isBlank();
+    }
+
+    /** Get the embedding API URI, or null if not configured. */
+    public String getEmbeddingUri() {
+        if (embeddingConfig == null) return null;
+        Object val = embeddingConfig.get("URI");
+        return val != null ? val.toString().trim() : null;
+    }
+
+    /** Get the embedding model name, or null if not configured. */
+    public String getEmbeddingModel() {
+        if (embeddingConfig == null) return null;
+        Object val = embeddingConfig.get("Model");
+        return val != null ? val.toString().trim() : null;
     }
 
     /** Get the conversation mode: "single-shot" or "multi-turn". */

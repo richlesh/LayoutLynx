@@ -7,6 +7,7 @@ When you MUST produce a document replacement (ONLY when asked):
 - Use standard unified diff format with @@ line markers, - for removed lines, + for added lines, and context lines (3 lines of unchanged context around each change)
 - Include enough context lines so the diff can be applied unambiguously
 - If the document is empty or you're creating entirely new content, use a ```markdown code block with the complete document instead
+- IMPORTANT: Always use exactly three backticks (```) for code fences, never four or more
 
 When you must NOT produce document changes:
 - The user asks a question (e.g., "what does this mean?", "how do I do X?", "explain Y")

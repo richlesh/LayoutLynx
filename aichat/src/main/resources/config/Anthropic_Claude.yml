@@ -19,6 +19,7 @@ Prompt:
     }
   Response:
     ContentPath: "content[0].text"
+
 Models:
   URI: https://api.anthropic.com/v1/models?limit=100
   Method: GET
@@ -29,3 +30,9 @@ Models:
     ListPath: "data"
     IdField: "id"
     DescriptionField: "display_name"
+
+# Anthropic does not provide an embedding API.
+# Omit or leave blank to use keyword-based indexing instead.
+# Embedding:
+#   URI:
+#   Model:

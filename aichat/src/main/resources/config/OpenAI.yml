@@ -16,6 +16,7 @@ Prompt:
     }
   Response:
     ContentPath: "choices[0].message.content"
+
 Models:
   URI: https://api.openai.com/v1/models
   Method: GET
@@ -26,3 +27,7 @@ Models:
     ListPath: "data"
     IdField: "id"
     DescriptionField: "id"
+
+Embedding:
+  URI: https://api.openai.com/v1/embeddings
+  Model: text-embedding-3-small

@@ -30,6 +30,7 @@ Prompt:
     }
   Response:
     ContentPath: "choices[0].message.content"
+
 Models:
   URI: https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2024-10-10&filters=function_text_chat&limit=200
   Method: GET
@@ -39,3 +40,7 @@ Models:
     ListPath: "resources"
     IdField: "model_id"
     DescriptionField: "label"
+
+Embedding:
+  URI: https://us-south.ml.cloud.ibm.com/ml/v1/text/embeddings?version=2024-10-08
+  Model: ibm/slate-125m-english-rtrvr-v2

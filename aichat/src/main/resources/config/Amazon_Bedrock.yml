@@ -20,6 +20,7 @@ Prompt:
     }
   Response:
     ContentPath: "choices[0].message.content"
+
 Models:
   URI: https://bedrock-mantle.us-east-1.api.aws/v1/models
   Method: GET
@@ -29,3 +30,7 @@ Models:
     ListPath: "data"
     IdField: "id"
     DescriptionField: "id"
+
+Embedding:
+  URI: https://bedrock-mantle.us-east-1.api.aws/v1/embeddings
+  Model: amazon.titan-embed-text-v2:0

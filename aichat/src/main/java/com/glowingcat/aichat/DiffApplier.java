@@ -45,6 +45,10 @@ public class DiffApplier {
         String[] lines = diff.split("\n");
         int i = 0;
 
+        // Regex for standard unified diff hunk header: @@ -start[,count] +start[,count] @@
+        java.util.regex.Pattern hunkPattern = java.util.regex.Pattern.compile(
+            "^@@\\s+-([\\d]+)(?:,([\\d]+))?\\s+\\+([\\d]+)(?:,([\\d]+))?\\s+@@");
+
         while (i < lines.length) {
             String line = lines[i];
 
@@ -54,14 +58,24 @@ public class DiffApplier {
                 continue;
             }
 
-            // Look for @@ hunk header
-            if (line.startsWith("@@")) {
-                Hunk hunk = parseHunkHeader(line);
+            // Look for @@ hunk header using regex
+            java.util.regex.Matcher m = hunkPattern.matcher(line);
+            if (m.find()) {
+                Hunk hunk = new Hunk();
+                hunk.originalStart = Integer.parseInt(m.group(1));
+                hunk.originalCount = m.group(2) != null ? Integer.parseInt(m.group(2)) : 1;
+                hunk.newStart = Integer.parseInt(m.group(3));
+                hunk.newCount = m.group(4) != null ? Integer.parseInt(m.group(4)) : 1;
                 i++;
 
                 // Collect hunk lines
-                while (i < lines.length && !lines[i].startsWith("@@")) {
+                while (i < lines.length) {
                     String hunkLine = lines[i];
+                    // Stop at next hunk header
+                    if (hunkPattern.matcher(hunkLine).find()) break;
+                    // Stop at --- / +++ (next file in multi-file diff)
+                    if (hunkLine.startsWith("---") || hunkLine.startsWith("+++")) break;
+
                     if (hunkLine.startsWith("-")) {
                         hunk.removedLines.add(hunkLine.substring(1));
                         hunk.operations.add(new Operation(OpType.REMOVE, hunkLine.substring(1)));
@@ -86,34 +100,52 @@ public class DiffApplier {
             }
         }
 
+        // If no hunks found with @@ headers, try treating the whole diff as a single hunk
+        if (hunks.isEmpty()) {
+            hunks = parseFreeformDiff(lines);
+        }
+
         return hunks;
     }
 
     /**
-     * Parse a @@ hunk header like "@@ -1,5 +1,7 @@" or "@@ -1,5 +1,7 @@ optional text"
+     * Fallback parser for diffs without @@ hunk headers.
+     * Treats the entire diff as a single hunk starting at line 1.
      */
-    private static Hunk parseHunkHeader(String header) throws DiffException {
-        // Match @@ -start,count +start,count @@
-        int minusIdx = header.indexOf('-', 2);
-        int plusIdx = header.indexOf('+', minusIdx);
-        int endIdx = header.indexOf("@@", 3);
-        if (minusIdx < 0 || plusIdx < 0 || endIdx < 0) {
-            throw new DiffException("Invalid hunk header: " + header);
+    private static List<Hunk> parseFreeformDiff(String[] lines) {
+        Hunk hunk = new Hunk();
+        hunk.originalStart = 1;
+        hunk.originalCount = 0;
+        hunk.newStart = 1;
+        hunk.newCount = 0;
+        boolean hasChanges = false;
+
+        for (String line : lines) {
+            if (line.startsWith("---") || line.startsWith("+++")) continue;
+            if (line.startsWith("-")) {
+                hunk.removedLines.add(line.substring(1));
+                hunk.operations.add(new Operation(OpType.REMOVE, line.substring(1)));
+                hunk.originalCount++;
+                hasChanges = true;
+            } else if (line.startsWith("+")) {
+                hunk.addedLines.add(line.substring(1));
+                hunk.operations.add(new Operation(OpType.ADD, line.substring(1)));
+                hunk.newCount++;
+                hasChanges = true;
+            } else if (line.startsWith(" ")) {
+                hunk.operations.add(new Operation(OpType.CONTEXT, line.substring(1)));
+                hunk.originalCount++;
+                hunk.newCount++;
+            } else if (!line.isEmpty()) {
+                hunk.operations.add(new Operation(OpType.CONTEXT, line));
+                hunk.originalCount++;
+                hunk.newCount++;
+            }
         }
 
-        String minusPart = header.substring(minusIdx + 1, plusIdx).trim().replace(",", " ");
-        String plusPart = header.substring(plusIdx + 1, endIdx).trim().replace(",", " ");
-
-        String[] minusParts = minusPart.split("\\s+");
-        String[] plusParts = plusPart.split("\\s+");
-
-        Hunk hunk = new Hunk();
-        hunk.originalStart = Integer.parseInt(minusParts[0]);
-        hunk.originalCount = minusParts.length > 1 ? Integer.parseInt(minusParts[1]) : 1;
-        hunk.newStart = Integer.parseInt(plusParts[0]);
-        hunk.newCount = plusParts.length > 1 ? Integer.parseInt(plusParts[1]) : 1;
-
-        return hunk;
+        List<Hunk> hunks = new ArrayList<>();
+        if (hasChanges) hunks.add(hunk);
+        return hunks;
     }
 
     /**
@@ -202,7 +234,7 @@ public class DiffApplier {
     private static boolean matchesAt(List<String> lines, int pos, List<String> matchLines) {
         if (pos < 0 || pos + matchLines.size() > lines.size()) return false;
         for (int i = 0; i < matchLines.size(); i++) {
-            if (!lines.get(pos + i).equals(matchLines.get(i))) return false;
+            if (!lines.get(pos + i).stripTrailing().equals(matchLines.get(i).stripTrailing())) return false;
         }
         return true;
     }
