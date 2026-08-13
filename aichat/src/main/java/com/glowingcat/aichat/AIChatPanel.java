@@ -53,6 +53,9 @@ public class AIChatPanel extends JPanel {
     private boolean useWebView = false;
     // Strong reference to prevent GC of the JavaScript bridge object
     private ChatBridge chatBridge;
+    // Status bar for showing document/system prompt sizes
+    private JLabel statusBar;
+    private Runnable statusUpdater;
 
     // Fallback rendering
     private JPanel fallbackChatPanel;
@@ -235,13 +238,17 @@ public class AIChatPanel extends JPanel {
         inputPanel.add(btnPanel, BorderLayout.EAST);
 
         JLabel statusBar = new JLabel(" ");
+        this.statusBar = statusBar;
         statusBar.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
         statusBar.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
 
-        Runnable statusUpdater = () -> {
+        statusUpdater = () -> {
             int sp = systemPrompt.length();
             int doc = editor.getText().length();
-            statusBar.setText(String.format("System: %,d chars    Document: %,d chars", sp, doc));
+            String docInfo = doc > 20_000
+                ? String.format("Document: %,d chars (truncated to 20,000 for LLM)", doc)
+                : String.format("Document: %,d chars", doc);
+            statusBar.setText(String.format("System: %,d chars    %s", sp, docInfo));
         };
         statusUpdater.run();
 
@@ -580,6 +587,9 @@ public class AIChatPanel extends JPanel {
         if (text.isEmpty()) return;
         inputArea.setText("");
 
+        // Update status bar with current document size
+        statusUpdater.run();
+
         // Add user bubble
         ChatMessage userMsg = new ChatMessage("user", text);
         chatMessages.add(userMsg);
@@ -590,7 +600,7 @@ public class AIChatPanel extends JPanel {
             promptNagCallback.run();
         }
 
-        String context = "Current document:\n```\n" + editor.getText() + "\n```";
+        String context = "Current document:\n```\n" + editor.getContextText() + "\n```";
         for (ContextProvider cp : contextProviders) {
             String extra = cp.supplier().get();
             if (extra != null && !extra.isEmpty()) {
