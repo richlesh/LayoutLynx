@@ -262,6 +262,7 @@ jobs:
           else
             jpackage \
               --input lib \
+              --resource-dir packaging/windows \
               --main-jar ${{ env.JARFILE }} \
               --main-class com.glowingcat.Main \
               --name LayoutLynx \
