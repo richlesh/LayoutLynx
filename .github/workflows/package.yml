@@ -260,9 +260,14 @@ jobs:
               fi
             fi
           else
+            # --win-per-user-install makes jpackage author a fully per-user MSI
+            # (perUser scope + registry/dir components under the per-user HKCU
+            # roots), so a no-admin install succeeds. A main.wxs override that
+            # only forced perUser in the Package element left the generated
+            # registry component on HKLM, failing with "need access to key".
             jpackage \
               --input lib \
-              --resource-dir packaging/windows \
+              --win-per-user-install \
               --main-jar ${{ env.JARFILE }} \
               --main-class com.glowingcat.Main \
               --name LayoutLynx \
