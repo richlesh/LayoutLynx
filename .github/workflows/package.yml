@@ -260,14 +260,14 @@ jobs:
               fi
             fi
           else
-            # --win-per-user-install makes jpackage author a fully per-user MSI
-            # (perUser scope + registry/dir components under the per-user HKCU
-            # roots), so a no-admin install succeeds. A main.wxs override that
-            # only forced perUser in the Package element left the generated
-            # registry component on HKLM, failing with "need access to key".
+            # Windows: build in two steps so the launcher .exe icon is embedded
+            # (a single-step --type msi does not reliably embed it, leaving a
+            # blank icon in Explorer / Start menu / the installer). Build the
+            # app-image first with --icon, then build the installer from it.
+            # --win-per-user-install authors a fully per-user MSI (HKCU registry
+            # + dir components), so a no-admin install succeeds.
             jpackage \
               --input lib \
-              --win-per-user-install \
               --main-jar ${{ env.JARFILE }} \
               --main-class com.glowingcat.Main \
               --name LayoutLynx \
@@ -279,6 +279,18 @@ jobs:
               --add-modules ALL-MODULE-PATH \
               --jlink-options "--strip-debug --no-header-files --no-man-pages --compress zip-6" \
               --java-options "$JAVA_OPTS" \
+              --type app-image
+
+            # Package the installer from the app-image.
+            jpackage \
+              --app-image LayoutLynx \
+              --win-per-user-install \
+              --name LayoutLynx \
+              --app-version "${{ env.APP_VERSION }}" \
+              --vendor "Glowing Cat" \
+              --copyright "(C) 2026 Glowing Cat" \
+              --description "A lightweight HTML/CSS editor with live preview" \
+              --icon "${{ matrix.icon }}" \
               --win-menu \
               --win-shortcut \
               --type ${{ matrix.pkg_type }}
