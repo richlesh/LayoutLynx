@@ -376,7 +376,11 @@ jobs:
           ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
           if [ ! -f "$ISCC" ]; then ISCC="/c/Program Files/Inno Setup 6/ISCC.exe"; fi
           # LayoutLynx/ is the jpackage app-image created in the previous step.
-          "$ISCC" "/DAppVersion=${{ env.APP_VERSION }}" "/DArch=${{ matrix.arch }}" packaging/windows/layoutlynx.iss
+          # Git Bash (MSYS) rewrites args that start with "/" into Windows paths, which made
+          # ISCC see "/DAppVersion=..." as extra script filenames. Disable that conversion.
+          export MSYS_NO_PATHCONV=1
+          export MSYS2_ARG_CONV_EXCL="*"
+          "$ISCC" "/DAppVersion=${{ env.APP_VERSION }}" "/DArch=${{ matrix.arch }}" "packaging/windows/layoutlynx.iss"
           ls -l *.exe
 
       - name: Azure login (Windows)
