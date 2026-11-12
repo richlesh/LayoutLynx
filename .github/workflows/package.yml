@@ -368,6 +368,17 @@ jobs:
           # Staple
           xcrun stapler staple LayoutLynx-${APP_VERSION}.dmg
 
+      - name: Build Inno Setup installer (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          choco install innosetup --no-progress -y
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          if [ ! -f "$ISCC" ]; then ISCC="/c/Program Files/Inno Setup 6/ISCC.exe"; fi
+          # LayoutLynx/ is the jpackage app-image created in the previous step.
+          "$ISCC" "/DAppVersion=${{ env.APP_VERSION }}" "/DArch=${{ matrix.arch }}" packaging/windows/layoutlynx.iss
+          ls -l *.exe
+
       - name: Azure login (Windows)
         if: runner.os == 'Windows'
         uses: azure/login@v3
@@ -384,7 +395,7 @@ jobs:
           signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT_NAME }}
           certificate-profile-name: ${{ secrets.AZURE_SIGNING_CERTIFICATE_PROFILE_NAME }}
           files-folder: ${{ github.workspace }}
-          files-folder-filter: msi
+          files-folder-filter: msi,exe
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
@@ -402,6 +413,7 @@ jobs:
           path: |
             *.dmg
             *.msi
+            *.exe
             *.deb
             *.rpm
 
@@ -414,6 +426,7 @@ jobs:
           files: |
             *.dmg
             *.msi
+            *.exe
             *.deb
             *.rpm
 
