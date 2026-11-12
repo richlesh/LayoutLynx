@@ -10,6 +10,7 @@
  */
 package com.glowingcat;
 
+import com.glowingcat.aichat.GenericVendorConfig;
 import javafx.application.Platform;
 import javafx.embed.swing.JFXPanel;
 
@@ -50,6 +51,21 @@ public class Main {
                 // Fall back to default
             }
         }
+
+        // Apply custom trust store settings before any HTTPS connections
+        GenericVendorConfig.applyTrustStore();
+
+        // Load the full gemoji shortcode set (:tada: -> emoji) from the bundled dataset.
+        EmojiShortcodes.load();
+
+        // Augment the bundled set from https://api.github.com/emojis in the background so
+        // GitHub-only shortcodes (custom images with no Unicode character, e.g. :shipit:)
+        // resolve to their hosted image. Best-effort and app-wide: it populates the shared
+        // shortcode map and never blocks startup or requires network access.
+        Thread emojiRefresh = new Thread(EmojiShortcodeValidator::refreshFromGitHub,
+                "github-emoji-refresh");
+        emojiRefresh.setDaemon(true);
+        emojiRefresh.start();
 
         // Match scroll bar width to WebView scrollbars with rounded thumbs
         UIManager.put("ScrollBar.width", 16);

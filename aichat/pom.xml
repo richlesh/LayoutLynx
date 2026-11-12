@@ -7,10 +7,12 @@
     <parent>
         <groupId>com.glowingcat</groupId>
         <artifactId>LayoutLynx-parent</artifactId>
-        <version>1.3.0</version>
+        <version>1.4.0</version>
     </parent>
 
+    <groupId>com.glowingcat</groupId>
     <artifactId>aichat</artifactId>
+    <version>1.13.0</version>
     <packaging>jar</packaging>
 
     <name>AI Chat Module</name>
@@ -42,23 +44,54 @@
             <artifactId>commonmark-ext-autolink</artifactId>
             <version>${commonmark.version}</version>
         </dependency>
+        <!-- JavaFX. OpenJFX ships classes only in platform-classified jars, and
+             its transitive classifier resolution is host-auto-detected and
+             unreliable on CI. Declare every used module explicitly with
+             <classifier>${javafx.platform}</classifier> so the correct native
+             jars are DIRECT dependencies on every platform. javafx.platform is
+             set by the OS-activated profiles in the parent POM (overridable via
+             -Djavafx.platform). -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
+            <scope>${javafx.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
+            <scope>${javafx.scope}</scope>
+        </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
-            <scope>provided</scope>
+            <classifier>${javafx.platform}</classifier>
+            <scope>${javafx.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-media</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>${javafx.platform}</classifier>
+            <scope>${javafx.scope}</scope>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-web</artifactId>
             <version>${javafx.version}</version>
-            <scope>provided</scope>
+            <classifier>${javafx.platform}</classifier>
+            <scope>${javafx.scope}</scope>
         </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-swing</artifactId>
             <version>${javafx.version}</version>
-            <scope>provided</scope>
+            <classifier>${javafx.platform}</classifier>
+            <scope>${javafx.scope}</scope>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -71,4 +104,21 @@
             <version>2.2</version>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Pin the compiler plugin to match the other modules. Without this,
+                 the module inherits whatever default the local Maven ships, and
+                 newer defaults (e.g. 3.16.0 on CI runners) fail to compile the
+                 classifier-resolved JavaFX dependencies ("package javafx.* does
+                 not exist"). -->
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>
